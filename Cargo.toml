@@ -1,0 +1,9 @@
+[package]
+name = "tally-ho"
+version = "0.1.0"
+authors = ["Zachary Newsom <knownsconegames@gmail.com>"]
+
+[dependencies]
+log = "0.4.1"
+fern = {version = "0.5.5", features = ["colored"]}
+chrono = "0.4.2"
