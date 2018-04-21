@@ -4,6 +4,7 @@ extern crate fern;
 extern crate log;
 
 mod game;
+mod scene;
 
 fn main() {
     // TODO: Handle this better, rather than just a panic
