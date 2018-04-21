@@ -3,6 +3,8 @@ extern crate fern;
 #[macro_use]
 extern crate log;
 
+mod game;
+
 fn main() {
     // TODO: Handle this better, rather than just a panic
     init_logging().unwrap();
