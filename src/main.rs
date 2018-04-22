@@ -2,6 +2,10 @@ extern crate chrono;
 extern crate fern;
 #[macro_use]
 extern crate log;
+#[macro_use]
+extern crate vulkano;
+extern crate vulkano_win;
+extern crate winit;
 
 mod game;
 mod scene;
