@@ -29,7 +29,7 @@ use vulkano::pipeline::viewport::{Viewport};
 use vulkano::framebuffer::{Framebuffer, Subpass};
 
 use cgmath::prelude::*;
-use cgmath::{perspective, Rad, Matrix4};
+use cgmath::{ortho, Rad, Matrix4};
 
 use winit::{EventsLoop, WindowBuilder, Window};
 
@@ -220,8 +220,8 @@ void main() {
     // TODO: Don't use just this one queue in the future 
     let queue = queues.nth(0).unwrap();
 
-    // TODO: Use projection, view, and model transforms - to multiply them with the vertex positions - will fix stretching problems
-    let mut proj = perspective(Rad(std::f32::consts::FRAC_PI_2), { dimensions[0] as f32 / dimensions[1] as f32 }, 0.01, 100.0);
+    let mut proj = get_projection(dimensions);
+    
     let mut view = Matrix4::look_at(cgmath::Point3::new(0.0, 0.0, 1.0), cgmath::Point3::new(0.0, 0.0, 0.0), cgmath::Vector3::new(0.0, -1.0, 0.0));
 
     let uniform_buffer = CpuBufferPool::<vs::ty::Data>::new(
@@ -264,7 +264,7 @@ void main() {
             std::mem::replace(&mut swapchain, new_swapchain);
             std::mem::replace(&mut images, new_images);
 
-            proj = perspective(Rad(std::f32::consts::FRAC_PI_2), { dimensions[0] as f32 / dimensions[1] as f32 }, 0.01, 100.0);
+            proj = get_projection(dimensions);
             
             framebuffers = None;
             recreate_swapchain = false;
@@ -369,4 +369,11 @@ fn init_logging() -> Result<(), fern::InitError> {
         .apply()?;
 
     Ok(())
+}
+
+fn get_projection(dimensions: [u32; 2]) -> Matrix4<f32> {
+    let aspect = dimensions[0] as f32 / dimensions[1] as f32;
+    let (w, h) = (1. * aspect, 1.);
+
+    ortho(-w, w, -h, h, -10., 10.)
 }
