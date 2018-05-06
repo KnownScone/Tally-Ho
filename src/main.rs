@@ -124,20 +124,25 @@ fn main() {
     };
 
     info!("Swapchain initialized");
+
+    // TODO: Don't use just this one queue in the future 
+    let queue = queues.nth(0).unwrap();
     
     #[derive(Debug, Clone)]
     struct Vertex { position: [f32; 2] }
     impl_vertex!(Vertex, position);
-    
-    let vertex_buffer = CpuAccessibleBuffer::from_iter(
-        device.clone(), 
-        BufferUsage::all(), 
-        [
-            Vertex { position: [-0.5, -0.25] },
-            Vertex { position: [0.0, 0.5] },
-            Vertex { position: [0.25, -0.1] }
-        ].iter().cloned()
-    ).expect("Couldn't create vertex buffer");
+
+    let local_vertex_buffer = DeviceLocalBuffer::<[Vertex]>::array(
+        device.clone(),
+        6,
+        BufferUsage::all(),
+        vec![queue.family()]
+    ).expect("Couldn't create local vertex buffer");
+
+    let vertex_buffer = CpuBufferPool::<Vertex>::new(
+        device.clone(),
+        BufferUsage::vertex_buffer() | BufferUsage::transfer_source(),
+    );
 
     info!("Vertex buffer initialized");
 
@@ -217,9 +222,6 @@ void main() {
 
     let mut framebuffers: Option<Vec<Arc<Framebuffer<_,_>>>> = None;
 
-    // TODO: Don't use just this one queue in the future 
-    let queue = queues.nth(0).unwrap();
-
     let mut proj = get_projection(dimensions);
     
     let mut view = Matrix4::look_at(cgmath::Point3::new(0.0, 0.0, 1.0), cgmath::Point3::new(0.0, 0.0, 0.0), cgmath::Vector3::new(0.0, -1.0, 0.0));
@@ -244,6 +246,7 @@ void main() {
 
     let mut previous_frame_end = Box::new(now(device.clone())) as Box<GpuFuture>;
     let mut recreate_swapchain = false;
+    let mut update_vertices = true;
     let mut running = true;
     while running {
         previous_frame_end.cleanup_finished();
@@ -295,12 +298,34 @@ void main() {
             Err(err) => panic!("{:?}", err)
         };
 
-        let command_buffer = AutoCommandBufferBuilder::primary_one_time_submit(device.clone(), queue.family()).unwrap()
+        let mut builder = AutoCommandBufferBuilder::primary_one_time_submit(device.clone(), queue.family()).unwrap()
             .copy_buffer(
                 uniform_subbuffer,
                 local_uniform_buffer.clone()
-            ).unwrap()
+            ).unwrap();
 
+        if update_vertices {
+            let vertex_data = [
+                Vertex { position: [-0.5, -0.25] },
+                Vertex { position: [0.0, 0.5] },
+                Vertex { position: [0.25, -0.1] },
+                Vertex { position: [0.5, 0.25] },
+                Vertex { position: [0.0, -0.5] },
+                Vertex { position: [-0.25, -0.1] }
+            ].iter().cloned();
+
+            let vertex_chunk = vertex_buffer.chunk(vertex_data).expect("Couldn't build vertex chunk");
+            // TODO: Resize local_vertex_buffer (by creating a new DeviceLocalBuffer, I guess) when vertex_data too large
+            builder = builder
+                .copy_buffer(
+                    vertex_chunk,
+                    local_vertex_buffer.clone(),
+                ).unwrap();
+
+            update_vertices = false;
+        }
+
+        let command_buffer = builder
             .begin_render_pass(
                 framebuffers.as_ref().unwrap()[image_index].clone(), 
                 false, vec![[0.0, 0.0, 1.0, 1.0].into()]
@@ -316,7 +341,7 @@ void main() {
                     }]),
                     scissors: None,
                 },
-                vertex_buffer.clone(), set.clone(), ()
+                local_vertex_buffer.clone(), set.clone(), ()
             ).unwrap()
             
             .end_render_pass().unwrap()
