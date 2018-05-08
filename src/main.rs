@@ -400,5 +400,5 @@ fn get_projection(dimensions: [u32; 2]) -> Matrix4<f32> {
     let aspect = dimensions[0] as f32 / dimensions[1] as f32;
     let (w, h) = (1. * aspect, 1.);
 
-    ortho(-w, w, -h, h, -10., 10.)
+    ortho(w, -w, h, -h, -10., 10.)
 }
