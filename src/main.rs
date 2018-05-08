@@ -134,7 +134,7 @@ fn main() {
 
     let local_vertex_buffer = DeviceLocalBuffer::<[Vertex]>::array(
         device.clone(),
-        6,
+        4,
         BufferUsage::all(),
         vec![queue.family()]
     ).expect("Couldn't create local vertex buffer");
@@ -145,6 +145,20 @@ fn main() {
     );
 
     info!("Vertex buffer initialized");
+
+    let local_index_buffer = DeviceLocalBuffer::<[u32]>::array(
+        device.clone(),
+        6,
+        BufferUsage::all(),
+        vec![queue.family()]
+    ).expect("Couldn't create local index buffer");
+    
+    let index_buffer = CpuBufferPool::<u32>::new(
+        device.clone(),
+        BufferUsage::index_buffer() | BufferUsage::transfer_source(),
+    );
+
+    info!("Index buffer initialized");
 
     mod vs {
         #[derive(VulkanoShader)]
@@ -306,20 +320,29 @@ void main() {
 
         if update_vertices {
             let vertex_data = [
-                Vertex { position: [-0.5, -0.25] },
-                Vertex { position: [0.0, 0.5] },
-                Vertex { position: [0.25, -0.1] },
-                Vertex { position: [0.5, 0.25] },
-                Vertex { position: [0.0, -0.5] },
-                Vertex { position: [-0.25, -0.1] }
+                Vertex { position: [-0.5, -0.5] },
+                Vertex { position: [0.5, -0.5] },
+                Vertex { position: [-0.5, 0.5] },
+                Vertex { position: [0.5, 0.5] },                
+            ].iter().cloned();
+
+            let index_data = [
+                0, 1, 2,
+                1, 2, 3
             ].iter().cloned();
 
             let vertex_chunk = vertex_buffer.chunk(vertex_data).expect("Couldn't build vertex chunk");
-            // TODO: Resize local_vertex_buffer (by creating a new DeviceLocalBuffer, I guess) when vertex_data too large
+            let index_chunk = index_buffer.chunk(index_data).expect("Couldn't build index chunk");
+            
+            // TODO: Resize local_vertex_buffer or local_index_buffer (by creating a new DeviceLocalBuffer, I guess) when data too large
             builder = builder
                 .copy_buffer(
                     vertex_chunk,
                     local_vertex_buffer.clone(),
+                ).unwrap()
+                .copy_buffer(
+                    index_chunk,
+                    local_index_buffer.clone(),
                 ).unwrap();
 
             update_vertices = false;
@@ -331,7 +354,7 @@ void main() {
                 false, vec![[0.0, 0.0, 1.0, 1.0].into()]
             ).unwrap()
 
-            .draw(pipeline.clone(),
+            .draw_indexed(pipeline.clone(),
                 DynamicState {
                     line_width: None,
                     viewports: Some(vec![Viewport {
@@ -341,7 +364,10 @@ void main() {
                     }]),
                     scissors: None,
                 },
-                local_vertex_buffer.clone(), set.clone(), ()
+                local_vertex_buffer.clone(), 
+                local_index_buffer.clone(),
+                set.clone(), 
+                ()
             ).unwrap()
             
             .end_render_pass().unwrap()
