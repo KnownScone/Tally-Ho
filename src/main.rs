@@ -132,9 +132,9 @@ fn main() {
     struct Vertex { position: [f32; 2] }
     impl_vertex!(Vertex, position);
 
-    let local_vertex_buffer = DeviceLocalBuffer::<[Vertex]>::array(
+    let mut local_vertex_buffer = DeviceLocalBuffer::<[Vertex]>::array(
         device.clone(),
-        4,
+        0,
         BufferUsage::all(),
         vec![queue.family()]
     ).expect("Couldn't create local vertex buffer");
@@ -146,9 +146,9 @@ fn main() {
 
     info!("Vertex buffer initialized");
 
-    let local_index_buffer = DeviceLocalBuffer::<[u32]>::array(
+    let mut local_index_buffer = DeviceLocalBuffer::<[u32]>::array(
         device.clone(),
-        6,
+        0,
         BufferUsage::all(),
         vec![queue.family()]
     ).expect("Couldn't create local index buffer");
@@ -333,8 +333,31 @@ void main() {
 
             let vertex_chunk = vertex_buffer.chunk(vertex_data).expect("Couldn't build vertex chunk");
             let index_chunk = index_buffer.chunk(index_data).expect("Couldn't build index chunk");
+
+            use vulkano::buffer::BufferAccess;
+
+            if vertex_chunk.len() > local_vertex_buffer.len() {
+                let new_size = vertex_chunk.len() + 5;
+                
+                local_vertex_buffer = DeviceLocalBuffer::<[Vertex]>::array(
+                    device.clone(),
+                    new_size,
+                    BufferUsage::all(),
+                    vec![queue.family()]
+                ).expect("Couldn't create local vertex buffer");
+            }
+
+            if index_chunk.len() > local_index_buffer.len() {
+                let new_size = index_chunk.len() + 5;
+                
+                local_index_buffer = DeviceLocalBuffer::<[u32]>::array(
+                    device.clone(),
+                    new_size,
+                    BufferUsage::all(),
+                    vec![queue.family()]
+                ).expect("Couldn't create local index buffer");
+            }
             
-            // TODO: Resize local_vertex_buffer or local_index_buffer (by creating a new DeviceLocalBuffer, I guess) when data too large
             builder = builder
                 .copy_buffer(
                     vertex_chunk,
