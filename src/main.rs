@@ -29,7 +29,7 @@ use vulkano::pipeline::viewport::{Viewport};
 use vulkano::framebuffer::{Framebuffer, Subpass};
 
 use cgmath::prelude::*;
-use cgmath::{ortho, Rad, Matrix4};
+use cgmath::{ortho, Rad, Matrix4, Vector3};
 
 use winit::{EventsLoop, WindowBuilder, Window};
 
@@ -144,7 +144,7 @@ fn main() {
         BufferUsage::vertex_buffer() | BufferUsage::transfer_source(),
     );
 
-    info!("Vertex buffer initialized");
+    info!("Vertex buffers initialized");
 
     let mut local_index_buffer = DeviceLocalBuffer::<[u32]>::array(
         device.clone(),
@@ -158,7 +158,7 @@ fn main() {
         BufferUsage::index_buffer() | BufferUsage::transfer_source(),
     );
 
-    info!("Index buffer initialized");
+    info!("Index buffers initialized");
 
     mod vs {
         #[derive(VulkanoShader)]
@@ -167,13 +167,17 @@ fn main() {
 #version 450
 layout(location = 0) in vec2 position;
 
-layout(set = 0, binding = 0) uniform Data {
+layout(set = 0, binding = 0) uniform ViewProjection {
     mat4 view;
     mat4 proj;
-} uniforms;
+} viewProj;
+
+layout(binding = 1) uniform Instance {
+    mat4 transform;
+} instance;
 
 void main() {
-    gl_Position = uniforms.proj * uniforms.view * vec4(position, 0.0, 1.0);
+    gl_Position = viewProj.proj * viewProj.view * instance.transform * vec4(position, 0.0, 1.0);
 }
 "]
         struct Dummy;
@@ -240,21 +244,35 @@ void main() {
     
     let mut view = Matrix4::look_at(cgmath::Point3::new(0.0, 0.0, 1.0), cgmath::Point3::new(0.0, 0.0, 0.0), cgmath::Vector3::new(0.0, -1.0, 0.0));
 
-    let uniform_buffer = CpuBufferPool::<vs::ty::Data>::new(
+    let view_proj_buffer = CpuBufferPool::<vs::ty::ViewProjection>::new(
         device.clone(),
         BufferUsage::uniform_buffer() | BufferUsage::transfer_source(),
     );
 
-    let local_uniform_buffer = DeviceLocalBuffer::<vs::ty::Data>::new(
+    let local_view_proj_buffer = DeviceLocalBuffer::<vs::ty::ViewProjection>::new(
         device.clone(),
         BufferUsage::uniform_buffer_transfer_destination(),
         vec![queue.family()]
-    ).expect("Couldn't create uniform device local buffer");
+    ).expect("Couldn't create view/projection device local buffer");
     
-    info!("Uniform buffer initialized");
+    info!("View/Projection buffers initialized");
+
+    let instance_buffer = CpuBufferPool::<vs::ty::Instance>::new(
+        device.clone(),
+        BufferUsage::uniform_buffer() | BufferUsage::transfer_source(),
+    );
+
+    let local_instance_buffer = DeviceLocalBuffer::<vs::ty::Instance>::new(
+        device.clone(),
+        BufferUsage::uniform_buffer_transfer_destination(),
+        vec![queue.family()]
+    ).expect("Couldn't create instance device local buffer");
+    
+    info!("Instance buffers initialized");
 
     let mut set = Arc::new(vulkano::descriptor::descriptor_set::PersistentDescriptorSet::start(pipeline.clone(), 0)
-        .add_buffer(local_uniform_buffer.clone()).unwrap()
+        .add_buffer(local_view_proj_buffer.clone()).unwrap()
+        .add_buffer(local_instance_buffer.clone()).unwrap()
         .build().unwrap()
     );
 
@@ -295,13 +313,6 @@ void main() {
             }).collect::<Vec<_>>());
             std::mem::replace(&mut framebuffers, new_framebuffers);
         }
-        
-        let uniform_data = vs::ty::Data {
-            view: view.into(),
-            proj: proj.into(),
-        };
-
-        let uniform_subbuffer = uniform_buffer.next(uniform_data).expect("Couldn't build uniform sub-buffer");
 
         let (image_index, acquire_future) = match swapchain::acquire_next_image(swapchain.clone(), None) {
             Ok(r) => r,
@@ -312,10 +323,27 @@ void main() {
             Err(err) => panic!("{:?}", err)
         };
 
+        let view_proj_data = vs::ty::ViewProjection {
+            view: view.into(),
+            proj: proj.into(),
+        };
+
+        let view_proj_subbuffer = view_proj_buffer.next(view_proj_data).expect("Couldn't build view/projection sub-buffer");
+        
+        let instance_data = vs::ty::Instance {
+            transform: Matrix4::from_translation(Vector3::new(-0.5, -0.5, 0.0)).into(),
+        };
+
+        let instance_subbuffer = instance_buffer.next(instance_data).expect("Couldn't build instance sub-buffer");
+
         let mut builder = AutoCommandBufferBuilder::primary_one_time_submit(device.clone(), queue.family()).unwrap()
             .copy_buffer(
-                uniform_subbuffer,
-                local_uniform_buffer.clone()
+                view_proj_subbuffer,
+                local_view_proj_buffer.clone()
+            ).unwrap()
+            .copy_buffer(
+                instance_subbuffer,
+                local_instance_buffer.clone()
             ).unwrap();
 
         if update_vertices {
@@ -394,6 +422,7 @@ void main() {
             ).unwrap()
             
             .end_render_pass().unwrap()
+
             .build().unwrap();
 
         let future = previous_frame_end.join(acquire_future)
