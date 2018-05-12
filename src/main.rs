@@ -16,6 +16,7 @@ mod scene;
 use std::sync::Arc;
 use std::cmp::{max, min};
 
+use vulkano::descriptor::descriptor_set::{FixedSizeDescriptorSet, FixedSizeDescriptorSetsPool, PersistentDescriptorSet};
 use vulkano::swapchain::{Surface, Swapchain, CompositeAlpha, PresentMode};
 use vulkano::swapchain;
 use vulkano::buffer::{BufferUsage, CpuBufferPool, CpuAccessibleBuffer, DeviceLocalBuffer};
@@ -172,7 +173,7 @@ layout(set = 0, binding = 0) uniform ViewProjection {
     mat4 proj;
 } viewProj;
 
-layout(binding = 1) uniform Instance {
+layout(set = 1, binding = 0) uniform Instance {
     mat4 transform;
 } instance;
 
@@ -261,20 +262,17 @@ void main() {
         device.clone(),
         BufferUsage::uniform_buffer() | BufferUsage::transfer_source(),
     );
-
-    let local_instance_buffer = DeviceLocalBuffer::<vs::ty::Instance>::new(
-        device.clone(),
-        BufferUsage::uniform_buffer_transfer_destination(),
-        vec![queue.family()]
-    ).expect("Couldn't create instance device local buffer");
     
     info!("Instance buffers initialized");
 
-    let mut set = Arc::new(vulkano::descriptor::descriptor_set::PersistentDescriptorSet::start(pipeline.clone(), 0)
+    let mut set = Arc::new(PersistentDescriptorSet::start(pipeline.clone(), 0)
         .add_buffer(local_view_proj_buffer.clone()).unwrap()
-        .add_buffer(local_instance_buffer.clone()).unwrap()
         .build().unwrap()
     );
+
+    let mut set_pool = FixedSizeDescriptorSetsPool::new(pipeline.clone(), 0);
+
+    info!("Descriptor sets initialized");
 
     let mut previous_frame_end = Box::new(now(device.clone())) as Box<GpuFuture>;
     let mut recreate_swapchain = false;
@@ -331,19 +329,19 @@ void main() {
         let view_proj_subbuffer = view_proj_buffer.next(view_proj_data).expect("Couldn't build view/projection sub-buffer");
         
         let instance_data = vs::ty::Instance {
-            transform: Matrix4::from_translation(Vector3::new(-0.5, -0.5, 0.0)).into(),
+            transform: Matrix4::from_translation(Vector3::new(0.0, 0.0, 0.0)).into(),
         };
 
         let instance_subbuffer = instance_buffer.next(instance_data).expect("Couldn't build instance sub-buffer");
+        
+        let instance_set = set_pool.next()
+            .add_buffer(instance_subbuffer).unwrap()
+            .build().unwrap();
 
         let mut builder = AutoCommandBufferBuilder::primary_one_time_submit(device.clone(), queue.family()).unwrap()
             .copy_buffer(
                 view_proj_subbuffer,
                 local_view_proj_buffer.clone()
-            ).unwrap()
-            .copy_buffer(
-                instance_subbuffer,
-                local_instance_buffer.clone()
             ).unwrap();
 
         if update_vertices {
@@ -417,7 +415,7 @@ void main() {
                 },
                 local_vertex_buffer.clone(), 
                 local_index_buffer.clone(),
-                set.clone(), 
+                (set.clone(), instance_set),
                 ()
             ).unwrap()
             
