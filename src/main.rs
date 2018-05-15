@@ -9,9 +9,11 @@ extern crate winit;
 #[macro_use]
 extern crate vulkano_shader_derive;
 extern crate cgmath;
+extern crate specs;
 
+mod component;
+mod system;
 mod game;
-mod scene;
 
 use std::sync::Arc;
 use std::cmp::{max, min};
