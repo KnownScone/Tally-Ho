@@ -10,6 +10,7 @@ extern crate winit;
 extern crate vulkano_shader_derive;
 extern crate cgmath;
 extern crate specs;
+extern crate rlua;
 
 mod component;
 mod system;
