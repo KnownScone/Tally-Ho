@@ -1,11 +1,4 @@
-use system as sys;
-use component as comp;
-
-use std::fs::File;
-use std::io::prelude::*;
-
 use specs;
-use rlua::{Lua, Table, Function, MetaMethod, Result as LuaResult, UserData, UserDataMethods, Variadic};
 
 pub struct Scene {
 
@@ -45,12 +38,21 @@ impl<'a> Game<'a> {
         }
     }
 
+// TODO: Try not to copy-cat functions from specs::World, at this point I might as well give public access to it
     pub fn create_entity(&mut self) -> specs::EntityBuilder {
         self.world.create_entity()
     }
 
+    pub fn create_entity_unchecked(&self) -> specs::EntityBuilder {
+        self.world.create_entity_unchecked()
+    }
+
     pub fn delete_entity(&mut self, entity: specs::Entity) -> Result<(), specs::error::WrongGeneration> {
         self.world.delete_entity(entity)
+    }
+
+    pub fn read_storage<T: specs::Component>(&self) -> specs::ReadStorage<T> {
+        self.world.read_storage::<T>()
     }
 
     pub fn tick(&mut self) {
@@ -60,6 +62,10 @@ impl<'a> Game<'a> {
 
 #[test]
 fn create_game() {
+    use system as sys;
+    use component as comp;
+    use script::Script;
+
     let velocity_sys = sys::VelocitySystem;
 
     let dispatcher = specs::DispatcherBuilder::new()
@@ -67,46 +73,27 @@ fn create_game() {
         .build();
 
     let mut game = Game::new(dispatcher);
-    
-    let lua = Lua::new();
+    let e = {
+        let mut script = Script::new();
+        script.register::<comp::Transform>("transform");
+        script.register::<comp::Velocity>("velocity");
 
-    let globals = lua.globals();
+        script.load_file("assets/scripts/test.lua");
 
-    let mut file = File::open("assets/scripts/test.lua").expect("File was not found");
-    let mut contents = String::new();
-    file.read_to_string(&mut contents)
-        .expect("Couldn't read the file");
-   
-    let init = lua.load(&contents, Some("test.lua")).unwrap();
-    init.call::<_, ()>(());
-
-    let g: String = globals.get("g").unwrap();
+        script.parse_entity("stuff", game.create_entity_unchecked())
+    };
 
     {
-        // TODO: Generalize this code into some structs/functions
-
-        let entity: Table = globals.get("entity").unwrap();
-        let mut e1 = game.create_entity();
-
-        for pair in entity.pairs::<String, Table>() {
-            let (comp_type, comp_data) = pair.unwrap();
-            e1 = match comp_type.as_ref() {
-                "transform" =>
-                    e1.with(comp::Transform { 
-                        x: comp_data.get("x").expect("Uh"), 
-                        y: comp_data.get("y").expect("Uh")
-                    }),
-                "velocity" =>
-                    e1.with(comp::Velocity { 
-                        x: comp_data.get("x").expect("Uh"), 
-                        y: comp_data.get("y").expect("Uh")
-                    }),
-                _ => continue
-            }
-        }
-
-        let e1 = e1.build();
+        let t_storage = game.read_storage::<comp::Transform>();
+        let v_storage = game.read_storage::<comp::Velocity>();
+        println!("BEFORE: {:?}, {:?}", t_storage.get(e).unwrap(), v_storage.get(e).unwrap());
     }
 
     game.tick();
+
+    {
+        let t_storage = game.read_storage::<comp::Transform>();
+        let v_storage = game.read_storage::<comp::Velocity>();
+        println!("AFTER: {:?}, {:?}", t_storage.get(e).unwrap(), v_storage.get(e).unwrap());
+    }
 }

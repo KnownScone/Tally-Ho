@@ -14,6 +14,7 @@ extern crate rlua;
 
 mod component;
 mod system;
+mod script;
 mod game;
 
 use std::sync::Arc;
