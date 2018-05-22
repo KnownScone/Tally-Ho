@@ -10,15 +10,15 @@ use specs;
 use rlua::{Lua, Table, Value as LuaValue};
 
 // A 'CompCtor' simply parses a component from lua and adds it onto an EntityBuilder
-type CompCtor<'a> = Fn(LuaValue, specs::EntityBuilder<'a>) -> specs::EntityBuilder<'a>;
+type CompCtor = for<'a> Fn(LuaValue, specs::EntityBuilder<'a>) -> specs::EntityBuilder<'a>;
 
-pub struct Script<'a> {
+pub struct Script {
     lua: Lua,
-    comp_ctor: HashMap<String, Arc<CompCtor<'a>>>
+    comp_ctor: HashMap<String, Arc<CompCtor>>
 }
 
-impl<'a> Script<'a> {
-    pub fn new() -> Script<'a> {
+impl Script {
+    pub fn new() -> Script {
         Script {
             lua: Lua::new(),
             comp_ctor: HashMap::new()
@@ -50,7 +50,7 @@ impl<'a> Script<'a> {
             .expect("Script failed to execute");
     }
 
-    pub fn parse_entity(&self, name: &str, mut eb: specs::EntityBuilder<'a>) -> specs::Entity {
+    pub fn parse_entity(&self, name: &str, mut eb: specs::EntityBuilder) -> specs::Entity {
         let globals = self.lua.globals();
 
         let ent_table: Table = globals.get(name.clone())

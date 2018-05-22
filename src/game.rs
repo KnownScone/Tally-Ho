@@ -73,15 +73,13 @@ fn create_game() {
         .build();
 
     let mut game = Game::new(dispatcher);
-    let e = {
-        let mut script = Script::new();
-        script.register::<comp::Transform>("transform");
-        script.register::<comp::Velocity>("velocity");
 
-        script.load_file("assets/scripts/test.lua");
+    let mut script = Script::new();
+    script.register::<comp::Transform>("transform");
+    script.register::<comp::Velocity>("velocity");
+    script.load_file("assets/scripts/test.lua");
 
-        script.parse_entity("stuff", game.create_entity_unchecked())
-    };
+    let e = script.parse_entity("stuff", game.create_entity());
 
     {
         let t_storage = game.read_storage::<comp::Transform>();
