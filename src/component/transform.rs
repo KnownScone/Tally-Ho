@@ -1,6 +1,6 @@
 use ::script::ComponentParser;
 
-use rlua::{Value as LuaValue, Result as LuaResult};
+use rlua::{Value as LuaValue, Result as LuaResult, Error as LuaError};
 use specs;
 
 #[derive(Debug)]
@@ -22,7 +22,11 @@ impl ComponentParser for Transform {
                     y: t.get("y").expect("Couldn't get y-pos")
                 }),
             LuaValue::Error(err) => Err(err),
-            _ => panic!("Couldn't parse the data to a component, not of the proper type"),
+            _ => Err(LuaError::FromLuaConversionError {
+                from: "_",
+                to: "table",
+                message: None, 
+            }),
         }
     }
 }
