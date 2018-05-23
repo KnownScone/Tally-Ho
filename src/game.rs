@@ -79,7 +79,7 @@ fn create_game() {
     script.register::<comp::Velocity>("velocity");
     script.load_file("assets/scripts/test.lua");
 
-    let e = script.parse_entity("stuff", game.create_entity());
+    let e = script.parse_entity("stuff", game.create_entity()).unwrap();
 
     {
         let t_storage = game.read_storage::<comp::Transform>();

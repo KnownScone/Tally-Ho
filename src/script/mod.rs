@@ -7,7 +7,7 @@ use std::io::prelude::*;
 use std::sync::Arc;
 
 use specs;
-use rlua::{Lua, Table, Value as LuaValue};
+use rlua::{Lua, Table, Value as LuaValue, Result as LuaResult, Error as LuaError};
 
 // A 'CompCtor' simply parses a component from lua and adds it onto an EntityBuilder
 type CompCtor = for<'a> Fn(LuaValue, specs::EntityBuilder<'a>) -> specs::EntityBuilder<'a>;
@@ -50,21 +50,24 @@ impl Script {
             .expect("Script failed to execute");
     }
 
-    pub fn parse_entity(&self, name: &str, mut eb: specs::EntityBuilder) -> specs::Entity {
+    pub fn parse_entity(&self, name: &str, mut eb: specs::EntityBuilder) -> LuaResult<specs::Entity> {
         let globals = self.lua.globals();
 
-        let ent_table: Table = globals.get(name.clone())
-            .expect("Couldn't find parsable entity of that name, not loaded");
+        let ent_table: Table = globals.get(name.clone())?;
 
+        // TODO: In the case that we have two components of the same type on the same entity, return an error
         for comp_pair in ent_table.pairs::<String, _>() {
-            let (comp_alias, comp_data) = comp_pair.unwrap();
+            let (comp_alias, comp_data) = comp_pair?;
 
             let ctor = self.comp_ctor.get(&comp_alias)
-                .expect("Couldn't find component under this alias, not registered");
+                .ok_or(LuaError::SyntaxError {
+                    message: format!("{} is not a registered component", comp_alias),
+                    incomplete_input: false,
+                })?;
 
             eb = ctor(comp_data, eb);
         }
 
-        eb.build()
+        Ok(eb.build())
     }
 }
