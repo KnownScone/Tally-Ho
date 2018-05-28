@@ -1,7 +1,6 @@
 use ::Vertex;
 
 use std::sync::Arc;
-use std::ops::Range;
 
 use vulkano as vk;
 use specs;

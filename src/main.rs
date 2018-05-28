@@ -27,17 +27,15 @@ use std::cmp::{max, min};
 
 use vulkano as vk;
 use vk::instance::{Instance, PhysicalDevice};
-use vk::swapchain::{Swapchain, Surface};
-use vk::framebuffer::{Framebuffer, Subpass};
-use vk::command_buffer::{AutoCommandBufferBuilder};
-use vk::buffer::{CpuBufferPool, DeviceLocalBuffer};
+use vk::swapchain::{Swapchain};
+use vk::framebuffer::{Framebuffer};
+use vk::buffer::{CpuBufferPool};
 use vk::sync::{now, GpuFuture};
 use vk::device::{Device};
 
-use cgmath::prelude::*;
-use cgmath::{ortho, Rad, Matrix4, Vector3};
+use cgmath::{ortho, Matrix4};
 
-use winit::{EventsLoop, WindowBuilder, Window};
+use winit::{EventsLoop, WindowBuilder};
 
 use vulkano_win::VkSurfaceBuild;
 
@@ -56,6 +54,7 @@ void main() {
     gl_Position = instance.transform * vec4(position, 0.0, 1.0);
 }
 "]
+    #[allow(dead_code)]
     struct Dummy;
 }
 
@@ -69,6 +68,7 @@ void main() {
     f_color = vec4(1.0, 0.0, 0.0, 1.0);
 }
 "]
+    #[allow(dead_code)]
     struct Dummy;
 }
 
@@ -80,162 +80,134 @@ pub struct Vertex {
 impl_vertex!(Vertex, position);
 
 pub fn select_physical_device<'a>(instance: &'a Arc<Instance>) -> Option<PhysicalDevice<'a>> {
-    // TODO: Better physical device selection
+    // TODO: Better physical device selection.
     PhysicalDevice::from_index(
         instance, 
         0
     )
 }
 
-pub fn init_device(
-    extensions: vk::instance::DeviceExtensions, 
-    features: vulkano::instance::Features, 
-    physical_device: PhysicalDevice
-) -> Result<(Arc<Device>, vk::device::QueuesIter), vk::device::DeviceCreationError> {
-    let queue_family = physical_device.queue_families();
-
-    // TODO: Better handling of queue_family
-    Device::new(
-        physical_device, 
-        &physical_device.supported_features(), 
-        &extensions, 
-        queue_family.map(|queue| (queue, 1.0))
-    )
-}
-
-pub fn init_swapchain<W>(
-    device: Arc<Device>,
-    surface: Arc<Surface<W>>, 
-    capabs: vk::swapchain::Capabilities,
-    dimensions: [u32; 2]
-) -> Result<(Arc<Swapchain<W>>, Vec<Arc<vk::image::SwapchainImage<W>>>), vk::swapchain::SwapchainCreationError> {
-    // TODO: Comments on all these swapchain components
-
-    // Try to use double-buffering.
-    let buffers_count = max(min(2, capabs.min_image_count), capabs.max_image_count.unwrap_or(2));
-
-    let transform = capabs.current_transform;
-
-    let (format, color_space) = capabs.supported_formats[0];
-
-    let usage = vk::image::ImageUsage {
-        color_attachment: true,
-        .. vk::image::ImageUsage::none()
-    };
-
-    let alpha = capabs.supported_composite_alpha.iter().next().unwrap();
-
-    let sharing_mode = vk::sync::SharingMode::Exclusive(0);
-
-    let present_mode = vk::swapchain::PresentMode::Fifo;
-
-    Swapchain::new(
-        device.clone(),
-        surface.clone(),
-        buffers_count,
-        format,
-        dimensions,
-        1,
-        capabs.supported_usage_flags,
-        sharing_mode,
-        transform,
-        alpha,
-        present_mode,
-        true,
-        None
-    )
-}
-
-pub fn init_render_pass<W>(
-    device: Arc<Device>, 
-    swapchain: Arc<Swapchain<W>>
-) -> Result<Arc<vk::framebuffer::RenderPassAbstract + Send + Sync>, vk::framebuffer::RenderPassCreationError> {
-    single_pass_renderpass!(device.clone(),
-        attachments: {
-            // `color` is a custom name we give to the first and only attachment.
-            color: {
-                // `load: Clear` means that we ask the GPU to clear the content of this
-                // attachment at the start of the drawing.
-                load: Clear,
-                // `store: Store` means that we ask the GPU to store the output of the draw
-                // in the actual image. We could also ask it to discard the result.
-                store: Store,
-                // `format: <ty>` indicates the type of the format of the image. This has to
-                // be one of the types of the `vulkano::format` module (or alternatively one
-                // of your structs that implements the `FormatDesc` trait). Here we use the
-                // generic `vulkano::format::Format` enum because we don't know the format in
-                // advance.
-                format: swapchain.format(),
-                samples: 1,
-            }
-        },
-        pass: {
-            // We use the attachment named `color` as the one and only color attachment.
-            color: [color],
-            // No depth-stencil attachment is indicated with empty brackets.
-            depth_stencil: {}
-        }
-    ).map(|x| Arc::new(x) as Arc<vk::framebuffer::RenderPassAbstract + Send + Sync>)
-}
-
 // TODO: Texture rendering!
 
 fn main() {
-    // TODO: Handle this better, rather than just a panic
+    // TODO: Handle this better, rather than just a panic.
     init_logging().unwrap();
 
     info!("Logging initialized");
 
+    // Holds the application's name and version. Built from 'Cargo.toml' at compile-time.
     let app_info = app_info_from_cargo_toml!();
 
+    // Instance of a Vulkan context, essential to the rest of the application.
     let instance = {
+        // List of extensions that must be enabled on the newly-created instance.
+        // * It is not possible to use the features of an extension if it was not explicitly enabled.
         let extensions = vulkano_win::required_extensions();
 
         Instance::new(
             Some(&app_info), 
             &extensions, 
+            // ? Use the instance 'layers' for debugging?
             None
         ).expect("Couldn't initialize instance")
     };
     info!("Instance initialized");
 
+    // Selects a physical device from the ones available on the system.
     let physical_device = select_physical_device(&instance)
         .expect("Couldn't select physical device");
     info!("Physical device selected");
 
-    let (device, mut queues) =
-        init_device(
-            vk::instance::DeviceExtensions {
-                khr_swapchain: true,
-                .. vk::instance::DeviceExtensions::none()
-            }, 
-            vk::instance::Features::none(), 
-            physical_device
-        ).expect("Couldn't initialize device");
+    // The device and an iterator over the created queues.
+    // A queue is a CPU thread, executing it's commands one after another, that is used to submit commands to the GPU. 
+    let (device, mut queues) = {
+        // Device extensions are similar to instance extensions, except they are for the device. 
+        // * It is not possible to use the functions of a extension if it was not explicitly enabled.
+        let extensions = vk::instance::DeviceExtensions {
+            khr_swapchain: true,
+            .. vk::instance::DeviceExtensions::none()
+        };
+
+        // Features are similar too, except they are part of the core Vulkan specs instead of being separate documents.
+        // * It is not possible to use the functions of a feature if it was not explicitly enabled.
+        let features = physical_device.supported_features();
+
+        // TODO: Better handling of queues (specifying priorities, etc.)
+        // List of queues to create, each element indicates it's family and priority (0.0 - 1.0).
+        // Queues are divided in queue families, all the queues within have the same characteristics.
+        // * No guarantee can be made on the way the priority is handled by the implementation.        
+        let queues = physical_device.queue_families()
+            .map(|family| 
+                (family, 1.0)
+            );
+
+        Device::new(
+            physical_device, 
+            &features, 
+            &extensions,
+            queues,
+        ).expect("Couldn't initialize device")
+    };
 
     info!("Device initialized");
     info!("Queues initialized");
 
+    // Provides a way to retrieve events from the system and from the windows that were registered.
     let mut events_loop = EventsLoop::new();
     info!("Events loop initialized");
 
+    // Builds a Vulkan surface on the screen using winit.
     let surface = WindowBuilder::new()
         .with_title(app_info.application_name.unwrap())
         .build_vk_surface(&events_loop, instance.clone())
-        .expect("Couldn't build Vulkan surface");
-    info!("Vulkan surface initialized");
+        .expect("Couldn't build surface");
+    info!("Surface initialized");
 
+    // Acquires the capabilities of the Vulkan surface when used by the physical device.
     let capabs = surface.capabilities(physical_device)
         .expect("Couldn't acquire surface capabilities");
     info!("Surface capabilities acquired");
 
+    // Keeps track of the proper dimensions, allowing modification throughout the runtime.
     let mut dimensions = capabs.current_extent.unwrap_or([640, 480]);
 
-    let (mut swapchain, mut images) = init_swapchain(device.clone(), surface.clone(), capabs, dimensions)
-        .expect("Couldn't initialize swapchain");
-    info!("Swapchain initialized");
+    // The swapping system and the images that can be shown on the Vulkan surface.
+    // * The order in which the images are returned is important for the acquire_next_image and present functions.
+    let (mut swapchain, mut images) = {
+        // Try to use double-buffering.
+        let buffers_count = max(min(2, capabs.min_image_count), capabs.max_image_count.unwrap_or(2));
 
-    info!("Vulkan state finished initialization");
+        let transform = capabs.current_transform;
+
+        let (format, _color_space) = capabs.supported_formats[0];
+
+        let usage = vk::image::ImageUsage {
+            .. capabs.supported_usage_flags
+        };
+
+        let alpha = capabs.supported_composite_alpha.iter().next().unwrap();
+
+        let sharing_mode = vk::sync::SharingMode::Exclusive(0);
+
+        let present_mode = vk::swapchain::PresentMode::Fifo;
+
+        Swapchain::new(
+            device.clone(),
+            surface.clone(),
+            buffers_count,
+            format,
+            dimensions,
+            1,
+            usage,
+            sharing_mode,
+            transform,
+            alpha,
+            present_mode,
+            true,
+            None
+        ).expect("Couldn't initialize swapchain")
+    };
+    info!("Swapchain initialized");
 
     let queue = queues.nth(0).unwrap();
 
@@ -243,79 +215,65 @@ fn main() {
     let fs = fs::Shader::load(device.clone()).expect("Couldn't create shader module");
     info!("Shaders initialized");
 
-    let render_pass = init_render_pass(device.clone(), swapchain.clone())
-        .expect("Couldn't initialize render pass");
+    // Defines layout of the subpass(es).
+    let render_pass = Arc::new(single_pass_renderpass!(device.clone(),
+        attachments: {
+            // Custom name we give to the first and only attachment.
+            color: {
+                // GPU should clear the content of this attachment at the start of the drawing.
+                load: Clear,
+                // GPU should store the output of the draw in the actual image. We could also ask it to discard the result.
+                store: Store,
+                // Indicates the type of the format of the image. Here we use the format specified by the swapchain.
+                format: swapchain.format(),
+                samples: 1,
+            }
+        },
+        pass: {
+            // We use the attachment named color as the one and only color attachment.
+            color: [color],
+            // No depth-stencil attachment is indicated with empty brackets.
+            depth_stencil: {}
+        }
+    ).expect("Couldn't initialize render pass"));
+
     info!("Render pass initialized");
 
+    // Defines how to perform a draw operation.
     let pipeline = Arc::new(vk::pipeline::GraphicsPipeline::start()
         .vertex_input_single_buffer::<Vertex>()
         .vertex_shader(vs.main_entry_point(), ())
         .triangle_list()
         .viewports_dynamic_scissors_irrelevant(1)
         .fragment_shader(fs.main_entry_point(), ())
-        .render_pass(Subpass::from(render_pass.clone(), 0).unwrap())
+        .render_pass(vk::framebuffer::Subpass::from(render_pass.clone(), 0).unwrap())
         .build(device.clone())
         .unwrap());
     info!("Pipeline initialized");
 
+    // List of frame-buffers that each contain a render pass and the image views attached to it.
     let mut framebuffers: Option<Vec<Arc<Framebuffer<_,_>>>> = None;
 
-    let mut proj = get_projection(dimensions);
-    let mut view = Matrix4::look_at(cgmath::Point3::new(0.0, 0.0, 1.0), cgmath::Point3::new(0.0, 0.0, 0.0), cgmath::Vector3::new(0.0, -1.0, 0.0));
+    // let mut proj = get_projection(dimensions);
+    // let mut view = Matrix4::look_at(cgmath::Point3::new(0.0, 0.0, 1.0), cgmath::Point3::new(0.0, 0.0, 0.0), cgmath::Vector3::new(0.0, -1.0, 0.0));
 
-    use system::RenderSystem;
-    use vk::buffer::BufferUsage;
-
-    let mut local_vertex_buffer = DeviceLocalBuffer::<[Vertex]>::array(
-        device.clone(),
-        0,
-        BufferUsage::all(),
-        vec![queue.family()]
-    ).expect("Couldn't create local vertex buffer");
-
-    let vertex_buffer = CpuBufferPool::<Vertex>::new(
-        device.clone(),
-        BufferUsage::vertex_buffer() | BufferUsage::transfer_source(),
-    );
-
-    info!("Vertex buffers initialized");
-
-    let mut local_index_buffer = DeviceLocalBuffer::<[u32]>::array(
-        device.clone(),
-        0,
-        BufferUsage::all(),
-        vec![queue.family()]
-    ).expect("Couldn't create local index buffer");
-    
-    let index_buffer = CpuBufferPool::<u32>::new(
-        device.clone(),
-        BufferUsage::index_buffer() | BufferUsage::transfer_source(),
-    );
-
-    info!("Index buffers initialized");
-
-    let instance_buffer = CpuBufferPool::<vs::ty::Instance>::new(
-        device.clone(),
-        BufferUsage::uniform_buffer() | BufferUsage::transfer_source(),
-    );
-    
-    info!("Instance buffer initialized");
-
-    // TODO: Use our custom Game struct to set this up
+    // TODO: Use our custom Game struct to set this up.
 
     let mut world = specs::World::new();
 
-    world.add_resource(res::Device(Some(device.clone())));    
+    world.add_resource(res::Device(Some(device.clone())));   
     world.add_resource(res::Queue(Some(queue.clone())));    
     world.add_resource(res::Framebuffer(None));    
     world.add_resource(res::DynamicState(None));
 
-    let (render_sys, cmd_buf_rx) = RenderSystem::new(
+    let (render_sys, cmd_buf_rx) = sys::RenderSystem::new(
         pipeline.clone(), 
-        (local_vertex_buffer.clone(), vertex_buffer), 
-        (local_index_buffer.clone(), index_buffer), 
-        instance_buffer.clone(),
+        CpuBufferPool::<vs::ty::Instance>::new(
+            device.clone(),
+            vk::buffer::BufferUsage::uniform_buffer() | vk::buffer::BufferUsage::transfer_source(),
+        )
     );
+    info!("Render system initialized");
 
     let mut dispatcher = specs::DispatcherBuilder::new()
         .with(render_sys, "render", &[])
@@ -323,7 +281,7 @@ fn main() {
 
     dispatcher.setup(&mut world.res);
 
-    let entity = world.create_entity()
+    world.create_entity()
         .with(comp::StaticRender::new(
             vec![
                 Vertex { position: [-0.5, -0.5] },
@@ -338,11 +296,13 @@ fn main() {
         ))
         .build(); 
 
+    // Accumulates previous frames' futures until the GPU is done executing them.
+    // * Submitting a command produces a future, which holds required resources for as long as they are in use by the GPU.
     let mut previous_frame_end = Box::new(now(device.clone())) as Box<GpuFuture>;
     let mut recreate_swapchain = false;
-    let mut update_vertices = true;
     let mut running = true;
     while running {
+        // Frees up resources that are no longer needed by checking what the GPU has already processed.
         previous_frame_end.cleanup_finished();
 
         if recreate_swapchain {
@@ -350,6 +310,7 @@ fn main() {
                 .expect("Couldn't acquire surface capabilities")
                 .current_extent.unwrap_or([640, 480]);
 
+            // Recreate the swapchain and its images with the new dimensions.
             let (new_swapchain, new_images) = match swapchain.recreate_with_dimension(dimensions) {
                 Ok(r) => r,
                 Err(vk::swapchain::SwapchainCreationError::UnsupportedDimensions) => {
@@ -361,13 +322,16 @@ fn main() {
             std::mem::replace(&mut swapchain, new_swapchain);
             std::mem::replace(&mut images, new_images);
 
-            proj = get_projection(dimensions);
+            // proj = get_projection(dimensions);
             
+            // With new swapchain images, we recreate the frame buffers.
             framebuffers = None;
+
             recreate_swapchain = false;
         }
 
         if framebuffers.is_none() {
+            // Builds each frame buffer with the render pass and their corresponding image views.
             let new_framebuffers = Some(images.iter().map(|image| {
                 Arc::new(Framebuffer::start(render_pass.clone())
                     .add(image.clone()).unwrap()
@@ -376,6 +340,7 @@ fn main() {
             std::mem::replace(&mut framebuffers, new_framebuffers);
         }
 
+        // Blocks until able to acquire a drawable image from the swapchain. Returns the index of that image.
         let (image_index, acquire_future) = match vk::swapchain::acquire_next_image(swapchain.clone(), None) {
             Ok(r) => r,
             Err(vk::swapchain::AcquireError::OutOfDate) => { 
@@ -385,28 +350,39 @@ fn main() {
             Err(err) => panic!("{:?}", err)
         };
 
+        // Passes this frame's available frame buffer into a resource.
         (*world.write_resource::<res::Framebuffer>()).0 = Some(
             framebuffers.as_ref().unwrap()[image_index].clone()
         );
 
+        // TODO: Create the DynamicState somewhere else, it only needs an update when the dimensions change.
         (*world.write_resource::<res::DynamicState>()).0 = Some(
             vk::command_buffer::DynamicState {
                 line_width: None,
+                // List of viewports, the region of the image corresponding to the vertex coords -1.0 to 1.0.
                 viewports: Some(vec![vk::pipeline::viewport::Viewport {
+                    // Coordinates of the top-left corner of the viewport (in pixels).
                     origin: [0.0, 0.0],
+                    // Dimensions of the viewport (in pixels).
                     dimensions: [dimensions[0] as f32, dimensions[1] as f32],
+                    // The range to map z-coords with before comparison with other depth values.                    
                     depth_range: 0.0 .. 1.0,
                 }]),
+                // List of scissor boxes, any pixel outside of the scissor box is discarded.
                 scissors: None,
             }
         );
 
         dispatcher.dispatch(&world.res);
 
+        // Receives the render system's command buffer for execution.
         let command_buffer = cmd_buf_rx.recv().unwrap();
 
+        // Joins previous frames' accumulated futures with the new future.
         let future = previous_frame_end.join(acquire_future)
+            // Submits a command to execute our command buffer on the selected queue.
             .then_execute(queue.clone(), command_buffer).unwrap()
+            // Submits a command to present the image at the end of the queue (after executing previous commands).
             .then_swapchain_present(queue.clone(), swapchain.clone(), image_index)
             .then_signal_fence_and_flush();
 
