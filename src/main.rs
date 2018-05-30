@@ -29,7 +29,8 @@ use vulkano as vk;
 use vk::instance::{Instance, PhysicalDevice};
 use vk::swapchain::{Swapchain};
 use vk::framebuffer::{Framebuffer};
-use vk::buffer::{CpuBufferPool};
+use vk::buffer::{CpuBufferPool, DeviceLocalBuffer, BufferUsage};
+use vk::command_buffer::{AutoCommandBufferBuilder};
 use vk::sync::{now, GpuFuture};
 use vk::device::{Device};
 
@@ -50,8 +51,13 @@ layout(set = 0, binding = 0) uniform Instance {
     mat4 transform;
 } instance;
 
+layout(set = 1, binding = 0) uniform ViewProjection {
+    mat4 view;
+    mat4 proj;
+} viewProj;
+
 void main() {
-    gl_Position = instance.transform * vec4(position, 0.0, 1.0);
+    gl_Position = viewProj.proj * viewProj.view * instance.transform * vec4(position, 0.0, 1.0);
 }
 "]
     #[allow(dead_code)]
@@ -254,13 +260,30 @@ fn main() {
     // List of frame-buffers that each contain a render pass and the image views attached to it.
     let mut framebuffers: Option<Vec<Arc<Framebuffer<_,_>>>> = None;
 
-    // let mut proj = get_projection(dimensions);
-    // let mut view = Matrix4::look_at(cgmath::Point3::new(0.0, 0.0, 1.0), cgmath::Point3::new(0.0, 0.0, 0.0), cgmath::Vector3::new(0.0, -1.0, 0.0));
+    let mut proj = get_projection(dimensions);
+    let mut view = Matrix4::look_at_dir(cgmath::Point3::new(0.0, 0.0, 1.0), cgmath::Vector3::new(0.0, 0.0, -1.0), cgmath::Vector3::new(0.0, 1.0, 0.0));
+
+    let view_proj_buffer = CpuBufferPool::<vs::ty::ViewProjection>::new(
+        device.clone(),
+        BufferUsage::uniform_buffer() | BufferUsage::transfer_source(),
+    );
+
+    let local_view_proj_buffer = DeviceLocalBuffer::<vs::ty::ViewProjection>::new(
+        device.clone(),
+        BufferUsage::uniform_buffer_transfer_destination(),
+        vec![queue.family()]
+    ).expect("Couldn't create uniform device local buffer");
+
+    let mut view_proj_set = Arc::new(vulkano::descriptor::descriptor_set::PersistentDescriptorSet::start(pipeline.clone(), 0)
+        .add_buffer(local_view_proj_buffer.clone()).unwrap()
+        .build().unwrap()
+    );
 
     // TODO: Use our custom Game struct to set this up.
 
     let mut world = specs::World::new();
 
+    world.add_resource(res::ViewProjectionSet(Some(view_proj_set.clone())));   
     world.add_resource(res::Device(Some(device.clone())));   
     world.add_resource(res::Queue(Some(queue.clone())));    
     world.add_resource(res::Framebuffer(None));    
@@ -322,7 +345,7 @@ fn main() {
             std::mem::replace(&mut swapchain, new_swapchain);
             std::mem::replace(&mut images, new_images);
 
-            // proj = get_projection(dimensions);
+            proj = get_projection(dimensions);
             
             // With new swapchain images, we recreate the frame buffers.
             framebuffers = None;
@@ -374,14 +397,27 @@ fn main() {
         );
 
         dispatcher.dispatch(&world.res);
+        
+        let view_proj_data = vs::ty::ViewProjection {
+            view: view.into(),
+            proj: proj.into(),
+        };
 
+        let misc_command_buffer = AutoCommandBufferBuilder::primary_one_time_submit(device.clone(), queue.family()).unwrap()
+            .copy_buffer(
+                view_proj_buffer.next(view_proj_data).unwrap(),
+                local_view_proj_buffer.clone(),
+            ).unwrap()
+            .build().unwrap();
+        
         // Receives the render system's command buffer for execution.
-        let command_buffer = cmd_buf_rx.recv().unwrap();
+        let render_command_buffer = cmd_buf_rx.recv().unwrap();
 
         // Joins previous frames' accumulated futures with the new future.
         let future = previous_frame_end.join(acquire_future)
             // Submits a command to execute our command buffer on the selected queue.
-            .then_execute(queue.clone(), command_buffer).unwrap()
+            .then_execute(queue.clone(), misc_command_buffer).unwrap()
+            .then_execute(queue.clone(), render_command_buffer).unwrap()
             // Submits a command to present the image at the end of the queue (after executing previous commands).
             .then_swapchain_present(queue.clone(), swapchain.clone(), image_index)
             .then_signal_fence_and_flush();

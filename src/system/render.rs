@@ -56,16 +56,18 @@ where
         specs::Read<'a, res::Queue>,
         specs::Read<'a, res::Framebuffer>,
         specs::Read<'a, res::DynamicState>,
+        specs::Read<'a, res::ViewProjectionSet>,
         specs::WriteStorage<'a, comp::StaticRender>
     );
 
-    fn run(&mut self, (device, queue, framebuffer, state, mut rndr): Self::SystemData) {
+    fn run(&mut self, (device, queue, framebuffer, state, view_proj, mut rndr): Self::SystemData) {
         use specs::Join;
 
         let queue = queue.0.as_ref().unwrap();
         let device = device.0.as_ref().unwrap();
         let framebuffer = framebuffer.0.as_ref().unwrap();
         let state = state.0.as_ref().unwrap();
+        let view_proj = view_proj.0.as_ref().unwrap();
 
         // Get the components in need of initialization
         self.inserted.clear();
@@ -135,7 +137,7 @@ where
                 state.clone(),
                 vec![vertex_buf.clone()], 
                 index_buf.clone(),
-                (instance_set.clone()),
+                (instance_set.clone(), view_proj.clone()),
                 ()
             ).unwrap();
         }

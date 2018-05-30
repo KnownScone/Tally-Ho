@@ -3,6 +3,9 @@ use std::sync::Arc;
 use vulkano as vk;
 
 #[derive(Default)]
+pub struct ViewProjectionSet(pub Option<Arc<vk::descriptor::DescriptorSet + Send + Sync>>);
+
+#[derive(Default)]
 pub struct Device(pub Option<Arc<vk::device::Device>>);
 
 #[derive(Default)]
