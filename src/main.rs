@@ -9,6 +9,7 @@ extern crate winit;
 #[macro_use]
 extern crate vulkano_shader_derive;
 extern crate cgmath;
+extern crate image;
 extern crate specs;
 extern crate rlua;
 
@@ -46,6 +47,7 @@ mod vs {
     #[src = "
 #version 450
 layout(location = 0) in vec2 position;
+layout(location = 1) in vec2 uv;
 
 layout(set = 0, binding = 0) uniform Instance {
     mat4 transform;
@@ -56,8 +58,11 @@ layout(set = 1, binding = 0) uniform ViewProjection {
     mat4 proj;
 } viewProj;
 
+layout(location = 0) out vec2 f_uv;
+
 void main() {
     gl_Position = viewProj.proj * viewProj.view * instance.transform * vec4(position, 0.0, 1.0);
+    f_uv = uv;
 }
 "]
     #[allow(dead_code)]
@@ -69,9 +74,19 @@ mod fs {
     #[ty = "fragment"]
     #[src = "
 #version 450
+layout(set = 2, binding = 0) uniform sampler samp;
+layout(set = 2, binding = 1) uniform texture2D textures[4];
+
+layout(push_constant) uniform PER_OBJECT
+{
+    int imgIdx;
+} pc;
+
 layout(location = 0) out vec4 f_color;
+layout(location = 0) in vec2 f_uv;
+
 void main() {
-    f_color = vec4(1.0, 0.0, 0.0, 1.0);
+    f_color = texture(sampler2D(textures[pc.imgIdx], samp), f_uv);
 }
 "]
     #[allow(dead_code)]
@@ -81,9 +96,10 @@ void main() {
 #[derive(Debug, Clone)]
 pub struct Vertex { 
     position: [f32; 2],
+    uv: [f32; 2],
 }
 
-impl_vertex!(Vertex, position);
+impl_vertex!(Vertex, position, uv);
 
 pub fn select_physical_device<'a>(instance: &'a Arc<Instance>) -> Option<PhysicalDevice<'a>> {
     // TODO: Better physical device selection.
@@ -92,8 +108,6 @@ pub fn select_physical_device<'a>(instance: &'a Arc<Instance>) -> Option<Physica
         0
     )
 }
-
-// TODO: Texture rendering!
 
 fn main() {
     // TODO: Handle this better, rather than just a panic.
@@ -274,10 +288,42 @@ fn main() {
         vec![queue.family()]
     ).expect("Couldn't create uniform device local buffer");
 
-    let mut view_proj_set = Arc::new(vulkano::descriptor::descriptor_set::PersistentDescriptorSet::start(pipeline.clone(), 0)
+    let mut view_proj_set = Arc::new(vulkano::descriptor::descriptor_set::PersistentDescriptorSet::start(pipeline.clone(), 1)
         .add_buffer(local_view_proj_buffer.clone()).unwrap()
         .build().unwrap()
     );
+
+    let (texture, tex_future) = {
+        let loaded = image::open("assets/images/ultra_thunk.png").unwrap().to_rgba();
+        let dims = loaded.dimensions();
+        let image_data = loaded.into_raw().clone();
+
+        vk::image::ImmutableImage::from_iter(
+            image_data.iter().cloned(),
+            vk::image::Dimensions::Dim2d {
+                width: dims.0,
+                height: dims.1
+            },
+            vk::format::R8G8B8A8Srgb,
+            queue.clone()
+        ).unwrap()
+    };
+    info!("Immutable texture image created");
+    
+    let sampler = vk::sampler::Sampler::simple_repeat_linear(device.clone());
+
+    info!("Sampler created");
+
+    let tex_set = Arc::new(vulkano::descriptor::descriptor_set::PersistentDescriptorSet::start(pipeline.clone(), 2)
+        .add_sampler(sampler).unwrap()
+        .enter_array().unwrap()
+            .add_image(texture.clone()).unwrap()
+            .add_image(texture.clone()).unwrap()
+            .add_image(texture.clone()).unwrap()
+            .add_image(texture.clone()).unwrap()
+        .leave_array().unwrap()
+        .build().unwrap());
+    info!("Texture set initialized");
 
     // TODO: Use our custom Game struct to set this up.
 
@@ -294,7 +340,8 @@ fn main() {
         CpuBufferPool::<vs::ty::Instance>::new(
             device.clone(),
             vk::buffer::BufferUsage::uniform_buffer() | vk::buffer::BufferUsage::transfer_source(),
-        )
+        ),
+        tex_set
     );
     info!("Render system initialized");
 
@@ -307,10 +354,10 @@ fn main() {
     world.create_entity()
         .with(comp::StaticRender::new(
             vec![
-                Vertex { position: [-0.5, -0.5] },
-                Vertex { position: [0.5, -0.5] },
-                Vertex { position: [-0.5, 0.5] },
-                Vertex { position: [0.5, 0.5] },
+                Vertex { position: [-0.5, -0.5], uv: [1.0, 1.0], },
+                Vertex { position: [0.5, -0.5], uv: [0.0, 1.0] },
+                Vertex { position: [-0.5, 0.5], uv: [1.0, 0.0] },
+                Vertex { position: [0.5, 0.5], uv: [0.0, 0.0] },
             ],
             vec![
                 0, 1, 2,
@@ -321,7 +368,7 @@ fn main() {
 
     // Accumulates previous frames' futures until the GPU is done executing them.
     // * Submitting a command produces a future, which holds required resources for as long as they are in use by the GPU.
-    let mut previous_frame_end = Box::new(now(device.clone())) as Box<GpuFuture>;
+    let mut previous_frame_end = Box::new(tex_future) as Box<GpuFuture>;
     let mut recreate_swapchain = false;
     let mut running = true;
     while running {

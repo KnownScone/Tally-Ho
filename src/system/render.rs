@@ -1,4 +1,4 @@
-use ::vs;
+use ::{vs, fs};
 use ::component as comp;
 use ::resource as res;
 
@@ -15,6 +15,8 @@ use specs;
 // TODO: Implement view/projection matrix.
 pub struct RenderSystem<L> {
     pipeline: Arc<L>,
+    // TODO: Temporary, store in resource
+    tex_set: Arc<vk::descriptor::DescriptorSet + Send + Sync>,
     
     instance_sets: FixedSizeDescriptorSetsPool<Arc<L>>,
     instance_buf: CpuBufferPool<vs::ty::Instance>,
@@ -32,11 +34,13 @@ where
     pub fn new(
         pipeline: Arc<L>,
         instance_buf: CpuBufferPool<vs::ty::Instance>,
+        tex_set: Arc<vk::descriptor::DescriptorSet + Send + Sync>
     ) -> (RenderSystem<L>, mpsc::Receiver<AutoCommandBuffer>) {
         let (tx, rx) = mpsc::channel();
 
         (RenderSystem {
             pipeline: pipeline.clone(),
+            tex_set: tex_set.clone(),
             instance_sets: FixedSizeDescriptorSetsPool::new(pipeline.clone(), 0),
             instance_buf,
             inserted_id: None,
@@ -131,14 +135,14 @@ where
             let vertex_buf = rndr.vertex_buf.as_ref().unwrap();
             let index_buf = rndr.index_buf.as_ref().unwrap();
             let instance_set = rndr.instance_set.as_ref().unwrap();
-            
+
             builder = builder.draw_indexed(
                 self.pipeline.clone(),
                 state.clone(),
                 vec![vertex_buf.clone()], 
                 index_buf.clone(),
-                (instance_set.clone(), view_proj.clone()),
-                ()
+                (instance_set.clone(), view_proj.clone(), self.tex_set.clone()),
+                (fs::ty::PER_OBJECT { imgIdx: 0 })
             ).unwrap();
         }
 
