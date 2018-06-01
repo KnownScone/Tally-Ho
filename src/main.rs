@@ -79,7 +79,7 @@ layout(set = 2, binding = 1) uniform texture2D textures[4];
 
 layout(push_constant) uniform PER_OBJECT
 {
-    int imgIdx;
+    uint imgIdx;
 } pc;
 
 layout(location = 0) out vec4 f_color;
@@ -362,7 +362,8 @@ fn main() {
             vec![
                 0, 1, 2,
                 1, 2, 3
-            ]
+            ],
+            0
         ))
         .build(); 
 

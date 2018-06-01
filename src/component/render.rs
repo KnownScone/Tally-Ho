@@ -17,12 +17,15 @@ pub struct StaticRender {
     
     pub index_buf: Option<Arc<vk::buffer::ImmutableBuffer<[u32]>>>,
     pub index_data: Vec<u32>,
+
+    pub image_index: u32,
 }
 
 impl StaticRender {
-    pub fn new(vertex_data: Vec<Vertex>, index_data: Vec<u32>) -> StaticRender {
+    pub fn new(vertex_data: Vec<Vertex>, index_data: Vec<u32>, image_index: u32) -> StaticRender {
         StaticRender {
             instance_set: None,
+            image_index,
             vertex_buf: None,
             vertex_data,
             index_buf: None,

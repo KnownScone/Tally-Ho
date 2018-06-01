@@ -142,7 +142,7 @@ where
                 vec![vertex_buf.clone()], 
                 index_buf.clone(),
                 (instance_set.clone(), view_proj.clone(), self.tex_set.clone()),
-                (fs::ty::PER_OBJECT { imgIdx: 0 })
+                (fs::ty::PER_OBJECT { imgIdx: rndr.image_index })
             ).unwrap();
         }
 
