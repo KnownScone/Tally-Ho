@@ -1,3 +1,7 @@
+use resource as res;
+
+use std::time::{Instant, Duration};
+
 use specs;
 
 pub struct Scene {
@@ -20,13 +24,17 @@ pub struct Game<'a> {
     
     // TODO: Systems - logic
     dispatcher: specs::Dispatcher<'static, 'a>,
+
+    last_update: Option<Instant>,
     
-    world: specs::World,
+    pub world: specs::World,
 }
 
 impl<'a> Game<'a> {
     pub fn new(mut dispatcher: specs::Dispatcher<'static, 'a>) -> Game<'a> {
         let mut world = specs::World::new();
+        
+        world.add_resource(res::DeltaTime(0.0));   
         
         // Register the components and resources used in the registered systems (with default values)
         dispatcher.setup(&mut world.res);
@@ -34,64 +42,21 @@ impl<'a> Game<'a> {
         Game {
             scene: Scene::new(),
             dispatcher,
+            last_update: None,
             world,
         }
     }
 
-// TODO: Try not to copy-cat functions from specs::World, at this point I might as well give public access to it
-    pub fn create_entity(&mut self) -> specs::EntityBuilder {
-        self.world.create_entity()
-    }
+    pub fn update(&mut self, time_scale: f32) {
+        if let Some(lu) = self.last_update {
+            let dur = lu.elapsed();
+            let dt = dur.as_secs() as f32 + dur.subsec_nanos() as f32 / 1_000_000_000.0;
 
-    pub fn create_entity_unchecked(&self) -> specs::EntityBuilder {
-        self.world.create_entity_unchecked()
-    }
+            (*self.world.write_resource::<res::DeltaTime>()).0 = dt * time_scale;
+        }
 
-    pub fn delete_entity(&mut self, entity: specs::Entity) -> Result<(), specs::error::WrongGeneration> {
-        self.world.delete_entity(entity)
-    }
-
-    pub fn read_storage<T: specs::Component>(&self) -> specs::ReadStorage<T> {
-        self.world.read_storage::<T>()
-    }
-
-    pub fn tick(&mut self) {
         self.dispatcher.dispatch(&mut self.world.res);
-    }
-}
 
-#[test]
-fn create_game() {
-    use system as sys;
-    use component as comp;
-    use script::Script;
-
-    let velocity_sys = sys::VelocitySystem;
-
-    let dispatcher = specs::DispatcherBuilder::new()
-        .with(velocity_sys, "velocity", &[])
-        .build();
-
-    let mut game = Game::new(dispatcher);
-
-    let mut script = Script::new();
-    script.register::<comp::Transform>("transform");
-    script.register::<comp::Velocity>("velocity");
-    script.load_file("assets/scripts/test.lua");
-
-    let e = script.parse_entity("stuff", game.create_entity()).unwrap();
-
-    {
-        let t_storage = game.read_storage::<comp::Transform>();
-        let v_storage = game.read_storage::<comp::Velocity>();
-        println!("BEFORE: {:?}, {:?}", t_storage.get(e).unwrap(), v_storage.get(e).unwrap());
-    }
-
-    game.tick();
-
-    {
-        let t_storage = game.read_storage::<comp::Transform>();
-        let v_storage = game.read_storage::<comp::Velocity>();
-        println!("AFTER: {:?}, {:?}", t_storage.get(e).unwrap(), v_storage.get(e).unwrap());
+        self.last_update = Some(Instant::now());
     }
 }

@@ -24,7 +24,6 @@ use component as comp;
 use system as sys;
 
 use std::sync::Arc;
-use std::time::{Instant, Duration};
 use std::cmp::{max, min};
 
 use vulkano as vk;
@@ -328,15 +327,6 @@ fn main() {
 
     // TODO: Use our custom Game struct to set this up.
 
-    let mut world = specs::World::new();
-
-    world.add_resource(res::DeltaTime(Duration::new(0, 0)));   
-    world.add_resource(res::ViewProjectionSet(Some(view_proj_set.clone())));   
-    world.add_resource(res::Device(Some(device.clone())));   
-    world.add_resource(res::Queue(Some(queue.clone())));    
-    world.add_resource(res::Framebuffer(None));    
-    world.add_resource(res::DynamicState(None));
-
     let (render_sys, cmd_buf_rx) = sys::RenderSystem::new(
         pipeline.clone(), 
         CpuBufferPool::<vs::ty::Instance>::new(
@@ -353,36 +343,21 @@ fn main() {
         .with(velocity_sys, "velocity", &[])
         .build();
 
-    dispatcher.setup(&mut world.res);
+    let mut game = game::Game::new(dispatcher);
 
-    world.create_entity()
-        .with(comp::Render::new(
-            vec![
-                Vertex { position: [-0.5, -0.5], uv: [0.0, 0.0], },
-                Vertex { position: [0.5, -0.5], uv: [1.0, 0.0] },
-                Vertex { position: [-0.5, 0.5], uv: [0.0, 1.0] },
-                Vertex { position: [0.5, 0.5], uv: [1.0, 1.0] },
-            ],
-            vec![
-                0, 1, 2,
-                1, 2, 3
-            ],
-            0
-        ))
-        .with(comp::Transform {
-            x: 0.0,
-            y: 0.0
-        })
-        .with(comp::Velocity {
-            x: -0.1,
-            y: -0.1
-        })
-        .build(); 
+    let mut script = script::Script::new();
+    script.register::<comp::Transform>("transform");
+    script.register::<comp::Velocity>("velocity");
+    script.load_file("assets/scripts/test.lua");
+    game.world.add_resource(res::ViewProjectionSet(Some(view_proj_set.clone())));   
+    game.world.add_resource(res::Device(Some(device.clone())));   
+    game.world.add_resource(res::Queue(Some(queue.clone())));    
+    game.world.add_resource(res::Framebuffer(None));    
+    game.world.add_resource(res::DynamicState(None));
 
     // Accumulates previous frames' futures until the GPU is done executing them.
     // * Submitting a command produces a future, which holds required resources for as long as they are in use by the GPU.
     let mut previous_frame_end = Box::new(tex_future) as Box<GpuFuture>;
-    let mut last_frame = Instant::now();
     let mut recreate_swapchain = false;
     let mut running = true;
     while running {
@@ -435,12 +410,12 @@ fn main() {
         };
 
         // Passes this frame's available frame buffer into a resource.
-        (*world.write_resource::<res::Framebuffer>()).0 = Some(
+        (*game.world.write_resource::<res::Framebuffer>()).0 = Some(
             framebuffers.as_ref().unwrap()[image_index].clone()
         );
 
         // TODO: Create the DynamicState somewhere else, it only needs an update when the dimensions change.
-        (*world.write_resource::<res::DynamicState>()).0 = Some(
+        (*game.world.write_resource::<res::DynamicState>()).0 = Some(
             vk::command_buffer::DynamicState {
                 line_width: None,
                 // List of viewports, the region of the image corresponding to the vertex coords -1.0 to 1.0.
@@ -457,11 +432,7 @@ fn main() {
             }
         );
 
-        (*world.write_resource::<res::DeltaTime>()).0 = last_frame.elapsed();
-
-        dispatcher.dispatch(&world.res);
-
-        last_frame = Instant::now();
+        game.update(1.0);
 
         // Receives the render system's command buffer for execution.
         let render_command_buffer = cmd_buf_rx.recv().unwrap();

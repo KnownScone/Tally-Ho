@@ -15,7 +15,7 @@ impl<'a> specs::System<'a> for VelocitySystem {
     fn run(&mut self, (mut pos, vel, dt): Self::SystemData) {
         use specs::Join;
 
-        let dt = dt.0.as_secs() as f32 + dt.0.subsec_nanos() as f32 / 1_000_000_000.0;
+        let dt = dt.0;
         
         for (mut pos, vel) in (&mut pos.restrict_mut(), &vel).join() {
             
