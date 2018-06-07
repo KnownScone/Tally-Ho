@@ -347,8 +347,12 @@ fn main() {
 
     let mut script = script::Script::new();
     script.register::<comp::Transform>("transform");
+    script.register::<comp::Render>("render");
     script.register::<comp::Velocity>("velocity");
     script.load_file("assets/scripts/test.lua");
+
+    let e = script.parse_entity("stuff", game.world.create_entity()).unwrap();
+
     game.world.add_resource(res::ViewProjectionSet(Some(view_proj_set.clone())));   
     game.world.add_resource(res::Device(Some(device.clone())));   
     game.world.add_resource(res::Queue(Some(queue.clone())));    
