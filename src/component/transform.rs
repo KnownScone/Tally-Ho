@@ -10,7 +10,7 @@ pub struct Transform {
 }
 
 impl specs::Component for Transform {
-    type Storage = specs::VecStorage<Self>;
+    type Storage = specs::FlaggedStorage<Self, specs::VecStorage<Self>>;
 }
 
 impl ComponentParser for Transform { 

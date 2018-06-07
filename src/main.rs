@@ -24,6 +24,7 @@ use component as comp;
 use system as sys;
 
 use std::sync::Arc;
+use std::time::{Instant, Duration};
 use std::cmp::{max, min};
 
 use vulkano as vk;
@@ -329,6 +330,7 @@ fn main() {
 
     let mut world = specs::World::new();
 
+    world.add_resource(res::DeltaTime(Duration::new(0, 0)));   
     world.add_resource(res::ViewProjectionSet(Some(view_proj_set.clone())));   
     world.add_resource(res::Device(Some(device.clone())));   
     world.add_resource(res::Queue(Some(queue.clone())));    
@@ -343,16 +345,18 @@ fn main() {
         ),
         tex_set
     );
-    info!("Render system initialized");
+
+    let velocity_sys = sys::VelocitySystem;
 
     let mut dispatcher = specs::DispatcherBuilder::new()
         .with(render_sys, "render", &[])
+        .with(velocity_sys, "velocity", &[])
         .build();
 
     dispatcher.setup(&mut world.res);
 
     world.create_entity()
-        .with(comp::StaticRender::new(
+        .with(comp::Render::new(
             vec![
                 Vertex { position: [-0.5, -0.5], uv: [1.0, 1.0], },
                 Vertex { position: [0.5, -0.5], uv: [0.0, 1.0] },
@@ -365,11 +369,20 @@ fn main() {
             ],
             0
         ))
+        .with(comp::Transform {
+            x: 0.0,
+            y: 0.0
+        })
+        .with(comp::Velocity {
+            x: -0.1,
+            y: -0.1
+        })
         .build(); 
 
     // Accumulates previous frames' futures until the GPU is done executing them.
     // * Submitting a command produces a future, which holds required resources for as long as they are in use by the GPU.
     let mut previous_frame_end = Box::new(tex_future) as Box<GpuFuture>;
+    let mut last_frame = Instant::now();
     let mut recreate_swapchain = false;
     let mut running = true;
     while running {
@@ -444,7 +457,14 @@ fn main() {
             }
         );
 
+        (*world.write_resource::<res::DeltaTime>()).0 = last_frame.elapsed();
+
         dispatcher.dispatch(&world.res);
+
+        last_frame = Instant::now();
+
+        // Receives the render system's command buffer for execution.
+        let render_command_buffer = cmd_buf_rx.recv().unwrap();
         
         let view_proj_data = vs::ty::ViewProjection {
             view: view.into(),
@@ -457,9 +477,6 @@ fn main() {
                 local_view_proj_buffer.clone(),
             ).unwrap()
             .build().unwrap();
-        
-        // Receives the render system's command buffer for execution.
-        let render_command_buffer = cmd_buf_rx.recv().unwrap();
 
         // Joins previous frames' accumulated futures with the new future.
         let future = previous_frame_end.join(acquire_future)

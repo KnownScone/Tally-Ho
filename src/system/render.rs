@@ -21,8 +21,13 @@ pub struct RenderSystem<L> {
     instance_sets: FixedSizeDescriptorSetsPool<Arc<L>>,
     instance_buf: CpuBufferPool<vs::ty::Instance>,
 
-    inserted_id: Option<specs::ReaderId<specs::InsertedFlag>>,
-    inserted: specs::BitSet,
+    transform_ins_read: Option<specs::ReaderId<specs::InsertedFlag>>,
+    transform_mod_read: Option<specs::ReaderId<specs::ModifiedFlag>>,
+    update_transform: specs::BitSet,
+
+    render_ins_read: Option<specs::ReaderId<specs::InsertedFlag>>,
+    render_mod_read: Option<specs::ReaderId<specs::ModifiedFlag>>,
+    update_render: specs::BitSet,
 
     cmd_buf_tx: mpsc::Sender<AutoCommandBuffer>
 }
@@ -43,8 +48,12 @@ where
             tex_set: tex_set.clone(),
             instance_sets: FixedSizeDescriptorSetsPool::new(pipeline.clone(), 0),
             instance_buf,
-            inserted_id: None,
-            inserted: specs::BitSet::new(),
+            transform_ins_read: None,
+            transform_mod_read: None,
+            update_transform: specs::BitSet::new(),
+            render_ins_read: None,
+            render_mod_read: None,
+            update_render: specs::BitSet::new(),
             cmd_buf_tx: tx
         },
         rx)
@@ -61,10 +70,11 @@ where
         specs::Read<'a, res::Framebuffer>,
         specs::Read<'a, res::DynamicState>,
         specs::Read<'a, res::ViewProjectionSet>,
-        specs::WriteStorage<'a, comp::StaticRender>
+        specs::WriteStorage<'a, comp::Render>,
+        specs::ReadStorage<'a, comp::Transform>
     );
 
-    fn run(&mut self, (device, queue, framebuffer, state, view_proj, mut rndr): Self::SystemData) {
+    fn run(&mut self, (device, queue, framebuffer, state, view_proj, mut rndr, tran): Self::SystemData) {
         use specs::Join;
 
         let queue = queue.0.as_ref().unwrap();
@@ -73,12 +83,17 @@ where
         let state = state.0.as_ref().unwrap();
         let view_proj = view_proj.0.as_ref().unwrap();
 
-        // Get the components in need of initialization
-        self.inserted.clear();
-        rndr.populate_inserted(&mut self.inserted_id.as_mut().unwrap(), &mut self.inserted);
+        // Get the components in need of initialization or an update
+        self.update_render.clear();
+        self.update_transform.clear();
+        
+        rndr.populate_inserted(&mut self.render_ins_read.as_mut().unwrap(), &mut self.update_render);
+        rndr.populate_modified(&mut self.render_mod_read.as_mut().unwrap(), &mut self.update_render);
+        tran.populate_inserted(&mut self.transform_ins_read.as_mut().unwrap(), &mut self.update_transform);
+        tran.populate_modified(&mut self.transform_mod_read.as_mut().unwrap(), &mut self.update_transform);
 
         // Initializes newly-inserted render components' buffers and instance set.
-        for (rndr, _) in (&mut rndr, &self.inserted).join() {
+        for (rndr, _) in (&mut rndr, &self.update_render).join() {
             // Creates the immutable index buffer.
             let (index_buf, _) = vk::buffer::ImmutableBuffer::from_iter(
                 rndr.index_data.iter().cloned(),
@@ -98,8 +113,25 @@ where
             rndr.vertex_buf = Some(vertex_buf);
 
             let instance_data = vs::ty::Instance {
-                // TODO: Receive data from Transform component if possible.
                 transform: Matrix4::from_translation(Vector3::new(0.0, 0.0, 0.0)).into(),
+            };
+
+            let instance_subbuf = self.instance_buf.next(instance_data)
+                .expect("Couldn't build instance sub-buffer");
+
+            // Creates a descriptor set with the newly-allocated subbuffer (containing our instance data).
+            rndr.instance_set = Some(
+                Arc::new(
+                    self.instance_sets.next()
+                        .add_buffer(instance_subbuf).unwrap()
+                        .build().unwrap()
+                )
+            );
+        }
+
+        for (mut rndr, tran, _) in (&mut rndr, &tran, &self.update_transform).join() {
+            let instance_data = vs::ty::Instance {
+                transform: Matrix4::from_translation(Vector3::new(tran.x, tran.y, 0.0)).into(),
             };
 
             let instance_subbuf = self.instance_buf.next(instance_data)
@@ -159,7 +191,12 @@ where
         use specs::prelude::SystemData;
         Self::SystemData::setup(res);
 
-        let mut rndr_storage: specs::WriteStorage<comp::StaticRender> = SystemData::fetch(&res);
-        self.inserted_id = Some(rndr_storage.track_inserted());
+        let mut rndr_storage: specs::WriteStorage<comp::Render> = SystemData::fetch(&res);
+        self.render_ins_read = Some(rndr_storage.track_inserted());
+        self.render_mod_read = Some(rndr_storage.track_modified());
+
+        let mut tran_storage: specs::WriteStorage<comp::Transform> = SystemData::fetch(&res);
+        self.transform_ins_read = Some(tran_storage.track_inserted());        
+        self.transform_mod_read = Some(tran_storage.track_modified());        
     }
 }

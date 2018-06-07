@@ -1,6 +1,10 @@
 use std::sync::Arc;
+use std::time::Duration;
 
 use vulkano as vk;
+
+#[derive(Default)]
+pub struct DeltaTime(pub Duration);
 
 #[derive(Default)]
 pub struct ViewProjectionSet(pub Option<Arc<vk::descriptor::DescriptorSet + Send + Sync>>);

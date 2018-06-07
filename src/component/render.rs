@@ -6,7 +6,7 @@ use vulkano as vk;
 use specs;
 
 // Holds vulkano back-end rendering data
-pub struct StaticRender {
+pub struct Render {
     // TODO: Can't this just be a Box<>
     pub instance_set: Option<Arc<vk::descriptor::DescriptorSet + Send + Sync>>,
 
@@ -21,9 +21,9 @@ pub struct StaticRender {
     pub image_index: u32,
 }
 
-impl StaticRender {
-    pub fn new(vertex_data: Vec<Vertex>, index_data: Vec<u32>, image_index: u32) -> StaticRender {
-        StaticRender {
+impl Render {
+    pub fn new(vertex_data: Vec<Vertex>, index_data: Vec<u32>, image_index: u32) -> Render {
+        Render {
             instance_set: None,
             image_index,
             vertex_buf: None,
@@ -34,6 +34,6 @@ impl StaticRender {
     }
 }
 
-impl specs::Component for StaticRender {
+impl specs::Component for Render {
     type Storage = specs::FlaggedStorage<Self, specs::VecStorage<Self>>;
 }
