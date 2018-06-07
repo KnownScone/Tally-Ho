@@ -276,7 +276,7 @@ fn main() {
     let mut framebuffers: Option<Vec<Arc<Framebuffer<_,_>>>> = None;
 
     let mut proj = get_projection(dimensions);
-    let mut view = Matrix4::look_at_dir(cgmath::Point3::new(0.0, 0.0, 1.0), cgmath::Vector3::new(0.0, 0.0, -1.0), cgmath::Vector3::new(0.0, 1.0, 0.0));
+    let mut view = Matrix4::look_at_dir(cgmath::Point3::new(0.0, 0.0, -1.0), cgmath::Vector3::new(0.0, 0.0, 1.0), cgmath::Vector3::new(0.0, 1.0, 0.0));
 
     let view_proj_buffer = CpuBufferPool::<vs::ty::ViewProjection>::new(
         device.clone(),
@@ -358,10 +358,10 @@ fn main() {
     world.create_entity()
         .with(comp::Render::new(
             vec![
-                Vertex { position: [-0.5, -0.5], uv: [1.0, 1.0], },
-                Vertex { position: [0.5, -0.5], uv: [0.0, 1.0] },
-                Vertex { position: [-0.5, 0.5], uv: [1.0, 0.0] },
-                Vertex { position: [0.5, 0.5], uv: [0.0, 0.0] },
+                Vertex { position: [-0.5, -0.5], uv: [0.0, 0.0], },
+                Vertex { position: [0.5, -0.5], uv: [1.0, 0.0] },
+                Vertex { position: [-0.5, 0.5], uv: [0.0, 1.0] },
+                Vertex { position: [0.5, 0.5], uv: [1.0, 1.0] },
             ],
             vec![
                 0, 1, 2,
@@ -535,5 +535,5 @@ fn get_projection(dimensions: [u32; 2]) -> Matrix4<f32> {
     let aspect = dimensions[0] as f32 / dimensions[1] as f32;
     let (w, h) = (1. * aspect, 1.);
 
-    ortho(w, -w, h, -h, -10., 10.)
+    ortho(w, -w, -h, h, -10., 10.)
 }
