@@ -15,8 +15,6 @@ use specs;
 // TODO: Implement view/projection matrix.
 pub struct RenderSystem<L> {
     pipeline: Arc<L>,
-    // TODO: Temporary, store in resource
-    tex_set: Arc<vk::descriptor::DescriptorSet + Send + Sync>,
     
     instance_sets: FixedSizeDescriptorSetsPool<Arc<L>>,
     instance_buf: CpuBufferPool<vs::ty::Instance>,
@@ -39,13 +37,11 @@ where
     pub fn new(
         pipeline: Arc<L>,
         instance_buf: CpuBufferPool<vs::ty::Instance>,
-        tex_set: Arc<vk::descriptor::DescriptorSet + Send + Sync>
     ) -> (RenderSystem<L>, mpsc::Receiver<AutoCommandBuffer>) {
         let (tx, rx) = mpsc::channel();
 
         (RenderSystem {
             pipeline: pipeline.clone(),
-            tex_set: tex_set.clone(),
             instance_sets: FixedSizeDescriptorSetsPool::new(pipeline.clone(), 0),
             instance_buf,
             transform_ins_read: None,
@@ -70,12 +66,13 @@ where
         specs::Read<'a, res::Framebuffer>,
         specs::Read<'a, res::DynamicState>,
         specs::Read<'a, res::ViewProjectionSet>,
+        specs::Read<'a, res::TextureSet>,
         specs::Read<'a, res::MeshList>,
         specs::WriteStorage<'a, comp::Render>,
         specs::ReadStorage<'a, comp::Transform>
     );
 
-    fn run(&mut self, (device, queue, framebuffer, state, view_proj, mesh_list, mut rndr, tran): Self::SystemData) {
+    fn run(&mut self, (device, queue, framebuffer, state, view_proj, tex_set, mesh_list, mut rndr, tran): Self::SystemData) {
         use specs::Join;
 
         let queue = queue.0.as_ref().unwrap();
@@ -83,6 +80,7 @@ where
         let framebuffer = framebuffer.0.as_ref().unwrap();
         let state = state.0.as_ref().unwrap();
         let view_proj = view_proj.0.as_ref().unwrap();
+        let tex_set = tex_set.0.as_ref().unwrap();
         let mesh_list = &mesh_list.0;
 
         // Get the components in need of initialization or an update
@@ -138,7 +136,7 @@ where
                 state.clone(),
                 vec![mesh.vertex_buf.clone()], 
                 mesh.index_buf.clone(),
-                (instance_set.clone(), view_proj.clone(), self.tex_set.clone()),
+                (instance_set.clone(), view_proj.clone(), tex_set.clone()),
                 (fs::ty::PER_OBJECT { imgIdx: rndr.image_index })
             ).unwrap();
         }

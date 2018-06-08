@@ -13,6 +13,9 @@ pub struct DeltaTime(pub f32);
 pub struct ViewProjectionSet(pub Option<Arc<vk::descriptor::DescriptorSet + Send + Sync>>);
 
 #[derive(Default)]
+pub struct TextureSet(pub Option<Arc<vk::descriptor::DescriptorSet + Send + Sync>>);
+
+#[derive(Default)]
 pub struct Device(pub Option<Arc<vk::device::Device>>);
 
 #[derive(Default)]

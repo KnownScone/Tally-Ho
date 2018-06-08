@@ -331,7 +331,6 @@ fn main() {
             device.clone(),
             vk::buffer::BufferUsage::uniform_buffer() | vk::buffer::BufferUsage::transfer_source(),
         ),
-        tex_set
     );
 
     let velocity_sys = sys::VelocitySystem;
@@ -367,6 +366,7 @@ fn main() {
             queue.clone()
         )
     ]));
+    game.world.add_resource(res::TextureSet(Some(tex_set)));   
     game.world.add_resource(res::ViewProjectionSet(Some(view_proj_set.clone())));   
     game.world.add_resource(res::Device(Some(device.clone())));   
     game.world.add_resource(res::Queue(Some(queue.clone())));    
