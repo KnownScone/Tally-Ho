@@ -325,8 +325,6 @@ fn main() {
         .build().unwrap());
     info!("Texture set initialized");
 
-    // TODO: Use our custom Game struct to set this up.
-
     let (render_sys, cmd_buf_rx) = sys::RenderSystem::new(
         pipeline.clone(), 
         CpuBufferPool::<vs::ty::Instance>::new(
@@ -352,7 +350,23 @@ fn main() {
     script.load_file("assets/scripts/test.lua");
 
     let e = script.parse_entity("stuff", game.world.create_entity()).unwrap();
+    let e = script.parse_entity("stuff2", game.world.create_entity()).unwrap();
 
+    game.world.add_resource(res::MeshList(vec![
+        res::Mesh::new(
+            vec![
+                Vertex { position: [-0.5, -0.5], uv: [0.0, 0.0], },
+                Vertex { position: [0.5, -0.5], uv: [1.0, 0.0] },
+                Vertex { position: [-0.5, 0.5], uv: [0.0, 1.0] },
+                Vertex { position: [0.5, 0.5], uv: [1.0, 1.0] },
+            ],
+            vec![
+                0, 1, 2,
+                1, 2, 3
+            ],
+            queue.clone()
+        )
+    ]));
     game.world.add_resource(res::ViewProjectionSet(Some(view_proj_set.clone())));   
     game.world.add_resource(res::Device(Some(device.clone())));   
     game.world.add_resource(res::Queue(Some(queue.clone())));    

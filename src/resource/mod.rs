@@ -1,3 +1,6 @@
+mod mesh;
+pub use self::mesh::{Mesh, MeshList};
+
 use std::sync::Arc;
 use std::time::Duration;
 

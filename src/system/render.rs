@@ -70,11 +70,12 @@ where
         specs::Read<'a, res::Framebuffer>,
         specs::Read<'a, res::DynamicState>,
         specs::Read<'a, res::ViewProjectionSet>,
+        specs::Read<'a, res::MeshList>,
         specs::WriteStorage<'a, comp::Render>,
         specs::ReadStorage<'a, comp::Transform>
     );
 
-    fn run(&mut self, (device, queue, framebuffer, state, view_proj, mut rndr, tran): Self::SystemData) {
+    fn run(&mut self, (device, queue, framebuffer, state, view_proj, mesh_list, mut rndr, tran): Self::SystemData) {
         use specs::Join;
 
         let queue = queue.0.as_ref().unwrap();
@@ -82,6 +83,7 @@ where
         let framebuffer = framebuffer.0.as_ref().unwrap();
         let state = state.0.as_ref().unwrap();
         let view_proj = view_proj.0.as_ref().unwrap();
+        let mesh_list = &mesh_list.0;
 
         // Get the components in need of initialization or an update
         self.update_render.clear();
@@ -93,42 +95,6 @@ where
         tran.populate_modified(&mut self.transform_mod_read.as_mut().unwrap(), &mut self.update_transform);
 
         // Initializes newly-inserted render components' buffers and instance set.
-        for (rndr, _) in (&mut rndr, &self.update_render).join() {
-            // Creates the immutable index buffer.
-            let (index_buf, _) = vk::buffer::ImmutableBuffer::from_iter(
-                rndr.index_data.iter().cloned(),
-                vk::buffer::BufferUsage::index_buffer(),
-                queue.clone()
-            ).expect("Couldn't create index buffer");
-
-            rndr.index_buf = Some(index_buf);
-
-            // Creates the immutable vertex buffer.
-            let (vertex_buf, _) = vk::buffer::ImmutableBuffer::from_iter(
-                rndr.vertex_data.iter().cloned(),
-                vk::buffer::BufferUsage::vertex_buffer(),
-                queue.clone()
-            ).expect("Couldn't create vertex buffer");
-
-            rndr.vertex_buf = Some(vertex_buf);
-
-            let instance_data = vs::ty::Instance {
-                transform: Matrix4::from_translation(Vector3::new(0.0, 0.0, 0.0)).into(),
-            };
-
-            let instance_subbuf = self.instance_buf.next(instance_data)
-                .expect("Couldn't build instance sub-buffer");
-
-            // Creates a descriptor set with the newly-allocated subbuffer (containing our instance data).
-            rndr.instance_set = Some(
-                Arc::new(
-                    self.instance_sets.next()
-                        .add_buffer(instance_subbuf).unwrap()
-                        .build().unwrap()
-                )
-            );
-        }
-
         for (mut rndr, tran, _) in (&mut rndr, &tran, &self.update_transform).join() {
             let instance_data = vs::ty::Instance {
                 transform: Matrix4::from_translation(Vector3::new(tran.x, tran.y, 0.0)).into(),
@@ -164,15 +130,14 @@ where
 
         // Adds a draw command on the command buffer for each render component.
         for rndr in (&rndr).join() {
-            let vertex_buf = rndr.vertex_buf.as_ref().unwrap();
-            let index_buf = rndr.index_buf.as_ref().unwrap();
+            let mesh = &mesh_list[rndr.mesh_index];
             let instance_set = rndr.instance_set.as_ref().unwrap();
 
             builder = builder.draw_indexed(
                 self.pipeline.clone(),
                 state.clone(),
-                vec![vertex_buf.clone()], 
-                index_buf.clone(),
+                vec![mesh.vertex_buf.clone()], 
+                mesh.index_buf.clone(),
                 (instance_set.clone(), view_proj.clone(), self.tex_set.clone()),
                 (fs::ty::PER_OBJECT { imgIdx: rndr.image_index })
             ).unwrap();
