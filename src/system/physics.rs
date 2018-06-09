@@ -1,6 +1,7 @@
 use ::component as comp;
 use ::resource as res;
 
+use cgmath::{Zero, Vector3};
 use specs;
 
 pub struct VelocitySystem;
@@ -18,10 +19,9 @@ impl<'a> specs::System<'a> for VelocitySystem {
         let dt = dt.0;
         
         for (mut tran, vel) in (&mut tran.restrict_mut(), &vel).join() {
-            if vel.x != 0.0 || vel.y != 0.0 {
+            if vel.pos != Vector3::zero() {
                 let tran = tran.get_mut_unchecked();
-                tran.x += vel.x * dt;
-                tran.y += vel.y * dt;
+                tran.pos += vel.pos * dt;
             }
         }
     }

@@ -378,18 +378,17 @@ fn main() {
             tile_map
         )
         .with(comp::Transform {
-            x: -0.5,
-            y: -0.5
+            pos: cgmath::Vector3::new(0.0, 0.0, 0.0)
         })
         .build(); 
 
     game.world.add_resource(res::MeshList(vec![
         res::Mesh::new(
             vec![
-                Vertex { position: [-0.5, -0.5, 0.1], uv: [0.0, 0.0], },
-                Vertex { position: [0.5, -0.5, 0.1], uv: [1.0, 0.0] },
-                Vertex { position: [-0.5, 0.5, 0.1], uv: [0.0, 1.0] },
-                Vertex { position: [0.5, 0.5, 0.1], uv: [1.0, 1.0] },
+                Vertex { position: [-0.5, -0.5, 0.0], uv: [0.0, 0.0], },
+                Vertex { position: [0.5, -0.5, 0.0], uv: [1.0, 0.0] },
+                Vertex { position: [-0.5, 0.5, 0.0], uv: [0.0, 1.0] },
+                Vertex { position: [0.5, 0.5, 0.0], uv: [1.0, 1.0] },
             ],
             vec![
                 0, 1, 2,

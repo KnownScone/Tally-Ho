@@ -93,7 +93,7 @@ where
 
         for (mut sprite, tran, _) in (&mut sprite, &tran, &self.update_transform).join() {
             let instance_data = vs::ty::Instance {
-                transform: Matrix4::from_translation(Vector3::new(tran.x, tran.y, 0.0)).into(),
+                transform: Matrix4::from_translation(tran.pos).into(),
             };
 
             let instance_subbuf = self.instance_buf.next(instance_data)
@@ -111,7 +111,7 @@ where
 
         for (mut map, tran, _) in (&mut map, &tran, &self.update_transform).join() {
             let instance_data = vs::ty::Instance {
-                transform: Matrix4::from_translation(Vector3::new(tran.x, tran.y, 0.0)).into(),
+                transform: Matrix4::from_translation(tran.pos).into(),
             };
 
             let instance_subbuf = self.instance_buf.next(instance_data)

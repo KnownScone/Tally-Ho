@@ -3,11 +3,13 @@ g = "hey"
 stuff = {
   transform = {
     x = 0.0,
-    y = 0.0
+    y = 0.0,
+    z = 0.0
   },  
   velocity = {
     x = -0.25,
-    y = -0.25
+    y = -0.25,
+    z = 0.0
   },
   sprite = {
     mesh_index = 0,
@@ -18,11 +20,13 @@ stuff = {
 stuff2 = {
   transform = {
     x = 0.0,
-    y = 0.0
+    y = 0.0,
+    z = 0.0
   },  
   velocity = {
     x = 0.25,
-    y = 0.25
+    y = 0.25,
+    z = 0.0
   },
   sprite = {
     mesh_index = 0,
