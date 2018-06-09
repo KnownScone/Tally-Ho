@@ -68,11 +68,12 @@ where
         specs::Read<'a, res::ViewProjectionSet>,
         specs::Read<'a, res::TextureSet>,
         specs::Read<'a, res::MeshList>,
-        specs::WriteStorage<'a, comp::Render>,
+        specs::WriteStorage<'a, comp::Sprite>,
+        specs::WriteStorage<'a, comp::TileMap>,
         specs::ReadStorage<'a, comp::Transform>
     );
 
-    fn run(&mut self, (device, queue, framebuffer, state, view_proj, tex_set, mesh_list, mut rndr, tran): Self::SystemData) {
+    fn run(&mut self, (device, queue, framebuffer, state, view_proj, tex_set, mesh_list, mut sprite, mut map, tran): Self::SystemData) {
         use specs::Join;
 
         let queue = queue.0.as_ref().unwrap();
@@ -87,13 +88,10 @@ where
         self.update_render.clear();
         self.update_transform.clear();
         
-        rndr.populate_inserted(&mut self.render_ins_read.as_mut().unwrap(), &mut self.update_render);
-        rndr.populate_modified(&mut self.render_mod_read.as_mut().unwrap(), &mut self.update_render);
         tran.populate_inserted(&mut self.transform_ins_read.as_mut().unwrap(), &mut self.update_transform);
         tran.populate_modified(&mut self.transform_mod_read.as_mut().unwrap(), &mut self.update_transform);
 
-        // Initializes newly-inserted render components' buffers and instance set.
-        for (mut rndr, tran, _) in (&mut rndr, &tran, &self.update_transform).join() {
+        for (mut sprite, tran, _) in (&mut sprite, &tran, &self.update_transform).join() {
             let instance_data = vs::ty::Instance {
                 transform: Matrix4::from_translation(Vector3::new(tran.x, tran.y, 0.0)).into(),
             };
@@ -102,7 +100,7 @@ where
                 .expect("Couldn't build instance sub-buffer");
 
             // Creates a descriptor set with the newly-allocated subbuffer (containing our instance data).
-            rndr.instance_set = Some(
+            sprite.instance_set = Some(
                 Arc::new(
                     self.instance_sets.next()
                         .add_buffer(instance_subbuf).unwrap()
@@ -111,7 +109,23 @@ where
             );
         }
 
-        // TODO: In the future, check for transform modification and update the render.instance_set with it.
+        for (mut map, tran, _) in (&mut map, &tran, &self.update_transform).join() {
+            let instance_data = vs::ty::Instance {
+                transform: Matrix4::from_translation(Vector3::new(tran.x, tran.y, 0.0)).into(),
+            };
+
+            let instance_subbuf = self.instance_buf.next(instance_data)
+                .expect("Couldn't build instance sub-buffer");
+
+            // Creates a descriptor set with the newly-allocated subbuffer (containing our instance data).
+            map.instance_set = Some(
+                Arc::new(
+                    self.instance_sets.next()
+                        .add_buffer(instance_subbuf).unwrap()
+                        .build().unwrap()
+                )
+            );
+        }
 
         // Holds the list of commands that are going to be executed.
         // * The only queues able to execute the command buffer are the ones of the family passed to the constructor.
@@ -126,10 +140,10 @@ where
                 ]
             ).unwrap();
 
-        // Adds a draw command on the command buffer for each render component.
-        for rndr in (&rndr).join() {
-            let mesh = &mesh_list[rndr.mesh_index];
-            let instance_set = rndr.instance_set.as_ref().unwrap();
+        // Adds a draw command on the command buffer for each sprite component.
+        for sprite in (&sprite).join() {
+            let mesh = &mesh_list[sprite.mesh_index];
+            let instance_set = sprite.instance_set.as_ref().unwrap();
 
             builder = builder.draw_indexed(
                 self.pipeline.clone(),
@@ -137,8 +151,24 @@ where
                 vec![mesh.vertex_buf.clone()], 
                 mesh.index_buf.clone(),
                 (instance_set.clone(), view_proj.clone(), tex_set.clone()),
-                (fs::ty::PER_OBJECT { imgIdx: rndr.image_index })
+                (fs::ty::PER_OBJECT { imgIdx: sprite.image_index })
             ).unwrap();
+        }
+
+        // Adds a draw command on the command buffer for each sprite component.
+        for map in (&map).join() {
+            let instance_set = map.instance_set.as_ref().unwrap();
+
+            for chunk in &map.chunks {
+                builder = builder.draw_indexed(
+                    self.pipeline.clone(),
+                    state.clone(),
+                    vec![chunk.vertex_buf.clone()], 
+                    chunk.index_buf.clone(),
+                    (instance_set.clone(), view_proj.clone(), tex_set.clone()),
+                    (fs::ty::PER_OBJECT { imgIdx: map.image_index })
+                ).unwrap();
+            }
         }
 
         let command_buffer = 
@@ -154,9 +184,9 @@ where
         use specs::prelude::SystemData;
         Self::SystemData::setup(res);
 
-        let mut rndr_storage: specs::WriteStorage<comp::Render> = SystemData::fetch(&res);
-        self.render_ins_read = Some(rndr_storage.track_inserted());
-        self.render_mod_read = Some(rndr_storage.track_modified());
+        let mut render_storage: specs::WriteStorage<comp::Sprite> = SystemData::fetch(&res);
+        self.render_ins_read = Some(render_storage.track_inserted());
+        self.render_mod_read = Some(render_storage.track_modified());
 
         let mut tran_storage: specs::WriteStorage<comp::Transform> = SystemData::fetch(&res);
         self.transform_ins_read = Some(tran_storage.track_inserted());        

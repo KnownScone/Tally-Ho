@@ -15,6 +15,7 @@ extern crate rlua;
 
 mod resource;
 mod component;
+mod utility;
 mod system;
 mod script;
 mod game;
@@ -350,6 +351,37 @@ fn main() {
 
     let e = script.parse_entity("stuff", game.world.create_entity()).unwrap();
     let e = script.parse_entity("stuff2", game.world.create_entity()).unwrap();
+
+    let mut tile_map = comp::TileMap::new(
+        cgmath::Vector2::new(0.2, 0.2),
+        0,
+    );
+
+    tile_map.create_chunk(
+        queue.clone(),
+        cgmath::Point2::new(0, 0),
+        [utility::Rect2::new(cgmath::Vector2::new(0.30, 0.30), cgmath::Vector2::new(0.70, 0.70)); 25]
+    );
+    tile_map.create_chunk(
+        queue.clone(),
+        cgmath::Point2::new(0, 1),
+        [utility::Rect2::new(cgmath::Vector2::new(0.30, 0.30), cgmath::Vector2::new(0.70, 0.70)); 25]
+    );
+    tile_map.create_chunk(
+        queue.clone(),
+        cgmath::Point2::new(1, 0),
+        [utility::Rect2::new(cgmath::Vector2::new(0.30, 0.30), cgmath::Vector2::new(0.70, 0.70)); 25]
+    );
+
+    let e = game.world.create_entity()
+        .with(
+            tile_map
+        )
+        .with(comp::Transform {
+            x: -0.5,
+            y: -0.5
+        })
+        .build(); 
 
     game.world.add_resource(res::MeshList(vec![
         res::Mesh::new(
