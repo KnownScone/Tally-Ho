@@ -47,7 +47,7 @@ mod vs {
     #[ty = "vertex"]
     #[src = "
 #version 450
-layout(location = 0) in vec2 position;
+layout(location = 0) in vec3 position;
 layout(location = 1) in vec2 uv;
 
 layout(set = 0, binding = 0) uniform Instance {
@@ -62,7 +62,7 @@ layout(set = 1, binding = 0) uniform ViewProjection {
 layout(location = 0) out vec2 f_uv;
 
 void main() {
-    gl_Position = viewProj.proj * viewProj.view * instance.transform * vec4(position, 0.0, 1.0);
+    gl_Position = viewProj.proj * viewProj.view * instance.transform * vec4(position, 1.0);
     f_uv = uv;
 }
 "]
@@ -96,7 +96,7 @@ void main() {
 
 #[derive(Debug, Clone)]
 pub struct Vertex { 
-    position: [f32; 2],
+    position: [f32; 3],
     uv: [f32; 2],
 }
 
@@ -353,23 +353,23 @@ fn main() {
     let e = script.parse_entity("stuff2", game.world.create_entity()).unwrap();
 
     let mut tile_map = comp::TileMap::new(
-        cgmath::Vector2::new(0.2, 0.2),
+        cgmath::Vector3::new(0.2, 0.2, 0.2),
         0,
     );
 
     tile_map.create_chunk(
         queue.clone(),
-        cgmath::Point2::new(0, 0),
+        cgmath::Point3::new(0, 0, 0),
         [utility::Rect2::new(cgmath::Vector2::new(0.30, 0.30), cgmath::Vector2::new(0.70, 0.70)); 25]
     );
     tile_map.create_chunk(
         queue.clone(),
-        cgmath::Point2::new(0, 1),
+        cgmath::Point3::new(0, 1, 0),
         [utility::Rect2::new(cgmath::Vector2::new(0.30, 0.30), cgmath::Vector2::new(0.70, 0.70)); 25]
     );
     tile_map.create_chunk(
         queue.clone(),
-        cgmath::Point2::new(1, 0),
+        cgmath::Point3::new(1, 0, 0),
         [utility::Rect2::new(cgmath::Vector2::new(0.30, 0.30), cgmath::Vector2::new(0.70, 0.70)); 25]
     );
 
@@ -386,10 +386,10 @@ fn main() {
     game.world.add_resource(res::MeshList(vec![
         res::Mesh::new(
             vec![
-                Vertex { position: [-0.5, -0.5], uv: [0.0, 0.0], },
-                Vertex { position: [0.5, -0.5], uv: [1.0, 0.0] },
-                Vertex { position: [-0.5, 0.5], uv: [0.0, 1.0] },
-                Vertex { position: [0.5, 0.5], uv: [1.0, 1.0] },
+                Vertex { position: [-0.5, -0.5, 0.1], uv: [0.0, 0.0], },
+                Vertex { position: [0.5, -0.5, 0.1], uv: [1.0, 0.0] },
+                Vertex { position: [-0.5, 0.5, 0.1], uv: [0.0, 1.0] },
+                Vertex { position: [0.5, 0.5, 0.1], uv: [1.0, 1.0] },
             ],
             vec![
                 0, 1, 2,

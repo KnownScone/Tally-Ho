@@ -3,7 +3,7 @@ use ::utility::Rect2;
 
 use std::sync::Arc;
 
-use cgmath::{Point2, Vector2, Transform};
+use cgmath::{Point2, Point3, Vector2, Vector3, Transform};
 use vulkano as vk;
 use specs;
 
@@ -11,7 +11,7 @@ const CHUNK_SIZE: Vector2<u32> = Vector2 { x: 5, y: 5 };
 
 pub struct TileMap {
     pub instance_set: Option<Arc<vk::descriptor::DescriptorSet + Send + Sync>>,
-    pub tile_dims: Vector2<f32>,
+    pub tile_dims: Vector3<f32>,
 
     pub image_index: u32,
 
@@ -19,7 +19,7 @@ pub struct TileMap {
 }
 
 impl TileMap {
-    pub fn new(tile_dims: Vector2<f32>, image_index: u32) -> TileMap {
+    pub fn new(tile_dims: Vector3<f32>, image_index: u32) -> TileMap {
         TileMap {
             instance_set: None,
             tile_dims,
@@ -28,10 +28,11 @@ impl TileMap {
         }
     }
 
-    pub fn create_chunk(&mut self, queue: Arc<vk::device::Queue>, chunk_pos: Point2<u32>, tile_uvs: [Rect2<f32>; (CHUNK_SIZE.x * CHUNK_SIZE.y) as usize]) {
-        let chunk_pos = Vector2::new(
+    pub fn create_chunk(&mut self, queue: Arc<vk::device::Queue>, chunk_pos: Point3<u32>, tile_uvs: [Rect2<f32>; (CHUNK_SIZE.x * CHUNK_SIZE.y) as usize]) {
+        let chunk_pos = Vector3::new(
             (chunk_pos.x * CHUNK_SIZE.x) as f32 * self.tile_dims.x,
-            (chunk_pos.y * CHUNK_SIZE.y) as f32 * self.tile_dims.y
+            (chunk_pos.y * CHUNK_SIZE.y) as f32 * self.tile_dims.y,
+            chunk_pos.z as f32 * self.tile_dims.z
         );
         
         let vertex_data: Vec<_> = tile_uvs.iter().enumerate()
@@ -42,24 +43,20 @@ impl TileMap {
                 );
 
                 vec![
-                //     Vertex { position: [-0.5, -0.5], uv: [0.0, 0.0], },
-                // Vertex { position: [0.5, -0.5], uv: [1.0, 0.0] },
-                // Vertex { position: [-0.5, 0.5], uv: [0.0, 1.0] },
-                // Vertex { position: [0.5, 0.5], uv: [1.0, 1.0] },
                     Vertex {
-                        position: (chunk_pos + local_pos).into(),
+                        position: (chunk_pos + local_pos.extend(0.0)).into(),
                         uv: [uv.min.x, uv.min.y]
                     },
                     Vertex {
-                        position: (chunk_pos + local_pos + Vector2::new(self.tile_dims.x, 0.0)).into(),
+                        position: (chunk_pos + local_pos.extend(0.0) + Vector3::new(self.tile_dims.x, 0.0, 0.0)).into(),
                         uv: [uv.max.x, uv.min.y]
                     },
                     Vertex {
-                        position: (chunk_pos + local_pos + Vector2::new(0.0, self.tile_dims.y)).into(),
+                        position: (chunk_pos + local_pos.extend(0.0) + Vector3::new(0.0, self.tile_dims.y, 0.0)).into(),
                         uv: [uv.min.x, uv.max.y]
                     },
                     Vertex {
-                        position: (chunk_pos + local_pos + self.tile_dims).into(),
+                        position: (chunk_pos + local_pos.extend(0.0) + Vector3::new(self.tile_dims.x, self.tile_dims.y, 0.0)).into(),
                         uv: [uv.max.x, uv.max.y]
                     }
                 ]
