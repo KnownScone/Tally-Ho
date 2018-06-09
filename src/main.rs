@@ -344,7 +344,7 @@ fn main() {
 
     let mut script = script::Script::new();
     script.register::<comp::Transform>("transform");
-    script.register::<comp::Render>("render");
+    script.register::<comp::Sprite>("sprite");
     script.register::<comp::Velocity>("velocity");
     script.load_file("assets/scripts/test.lua");
 

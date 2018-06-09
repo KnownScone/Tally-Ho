@@ -9,7 +9,7 @@ stuff = {
     x = -0.25,
     y = -0.25
   },
-  render = {
+  sprite = {
     mesh_index = 0,
     image_index = 0,
   }
@@ -24,7 +24,7 @@ stuff2 = {
     x = 0.25,
     y = 0.25
   },
-  render = {
+  sprite = {
     mesh_index = 0,
     image_index = 0,
   }
