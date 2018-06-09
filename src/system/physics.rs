@@ -12,17 +12,16 @@ impl<'a> specs::System<'a> for VelocitySystem {
         specs::Read<'a, res::DeltaTime>
     );
 
-    fn run(&mut self, (mut pos, vel, dt): Self::SystemData) {
+    fn run(&mut self, (mut tran, vel, dt): Self::SystemData) {
         use specs::Join;
 
         let dt = dt.0;
         
-        for (mut pos, vel) in (&mut pos.restrict_mut(), &vel).join() {
-            
+        for (mut tran, vel) in (&mut tran.restrict_mut(), &vel).join() {
             if vel.x != 0.0 || vel.y != 0.0 {
-                let pos = pos.get_mut_unchecked();
-                pos.x += vel.x * dt;
-                pos.y += vel.y * dt;
+                let tran = tran.get_mut_unchecked();
+                tran.x += vel.x * dt;
+                tran.y += vel.y * dt;
             }
         }
     }
