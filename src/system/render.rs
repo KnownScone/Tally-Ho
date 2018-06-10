@@ -10,6 +10,7 @@ use vk::buffer::{CpuBufferPool};
 use vk::descriptor::descriptor_set::{FixedSizeDescriptorSetsPool};
 use vk::command_buffer::{AutoCommandBuffer, AutoCommandBufferBuilder};
 use cgmath::{Matrix4, Vector3};
+use dmsort;
 use specs;
 
 // TODO: Implement view/projection matrix.
@@ -21,11 +22,10 @@ pub struct RenderSystem<L> {
 
     transform_ins_read: Option<specs::ReaderId<specs::InsertedFlag>>,
     transform_mod_read: Option<specs::ReaderId<specs::ModifiedFlag>>,
-    update_transform: specs::BitSet,
+    inserted_transform: specs::BitSet,
+    modified_transform: specs::BitSet,
 
-    render_ins_read: Option<specs::ReaderId<specs::InsertedFlag>>,
-    render_mod_read: Option<specs::ReaderId<specs::ModifiedFlag>>,
-    update_render: specs::BitSet,
+    sorted: Vec<specs::Entity>,
 
     cmd_buf_tx: mpsc::Sender<AutoCommandBuffer>
 }
@@ -46,10 +46,9 @@ where
             instance_buf,
             transform_ins_read: None,
             transform_mod_read: None,
-            update_transform: specs::BitSet::new(),
-            render_ins_read: None,
-            render_mod_read: None,
-            update_render: specs::BitSet::new(),
+            inserted_transform: specs::BitSet::new(),
+            modified_transform: specs::BitSet::new(),
+            sorted: Vec::new(),
             cmd_buf_tx: tx
         },
         rx)
@@ -68,12 +67,13 @@ where
         specs::Read<'a, res::ViewProjectionSet>,
         specs::Read<'a, res::TextureSet>,
         specs::Read<'a, res::MeshList>,
+        specs::Entities<'a>,
         specs::WriteStorage<'a, comp::Sprite>,
         specs::WriteStorage<'a, comp::TileMap>,
         specs::ReadStorage<'a, comp::Transform>
     );
 
-    fn run(&mut self, (device, queue, framebuffer, state, view_proj, tex_set, mesh_list, mut sprite, mut map, tran): Self::SystemData) {
+    fn run(&mut self, (device, queue, framebuffer, state, view_proj, tex_set, mesh_list, ent, mut sprite, mut map, tran): Self::SystemData) {
         use specs::Join;
 
         let queue = queue.0.as_ref().unwrap();
@@ -85,13 +85,22 @@ where
         let mesh_list = &mesh_list.0;
 
         // Get the components in need of initialization or an update
-        self.update_render.clear();
-        self.update_transform.clear();
+        self.inserted_transform.clear();
+        self.modified_transform.clear();
         
-        tran.populate_inserted(&mut self.transform_ins_read.as_mut().unwrap(), &mut self.update_transform);
-        tran.populate_modified(&mut self.transform_mod_read.as_mut().unwrap(), &mut self.update_transform);
+        tran.populate_inserted(&mut self.transform_ins_read.as_mut().unwrap(), &mut self.inserted_transform);
+        tran.populate_modified(&mut self.transform_mod_read.as_mut().unwrap(), &mut self.modified_transform);
 
-        for (mut sprite, tran, _) in (&mut sprite, &tran, &self.update_transform).join() {
+        let mut need_sort = false;
+
+        for (ent, tran, _) in (&*ent, &tran, &self.inserted_transform | &self.modified_transform).join() {
+            let map = map.get_mut(ent);
+            let sprite = sprite.get_mut(ent);
+            
+            if map.is_none() && sprite.is_none() {
+                continue;
+            }
+
             let instance_data = vs::ty::Instance {
                 transform: Matrix4::from_translation(tran.pos).into(),
             };
@@ -100,31 +109,32 @@ where
                 .expect("Couldn't build instance sub-buffer");
 
             // Creates a descriptor set with the newly-allocated subbuffer (containing our instance data).
-            sprite.instance_set = Some(
-                Arc::new(
-                    self.instance_sets.next()
-                        .add_buffer(instance_subbuf).unwrap()
-                        .build().unwrap()
-                )
+            let set = Arc::new(
+                self.instance_sets.next()
+                    .add_buffer(instance_subbuf).unwrap()
+                    .build().unwrap()
             );
+
+            if let Some(map) = map {
+                map.instance_set = Some(set);
+            } else if let Some(sprite) = sprite {
+                sprite.instance_set = Some(set);
+            }
+
+            if self.inserted_transform.contains(ent.id()) {
+                self.sorted.push(ent);
+            }
+
+            need_sort = true;
         }
 
-        for (mut map, tran, _) in (&mut map, &tran, &self.update_transform).join() {
-            let instance_data = vs::ty::Instance {
-                transform: Matrix4::from_translation(tran.pos).into(),
-            };
-
-            let instance_subbuf = self.instance_buf.next(instance_data)
-                .expect("Couldn't build instance sub-buffer");
-
-            // Creates a descriptor set with the newly-allocated subbuffer (containing our instance data).
-            map.instance_set = Some(
-                Arc::new(
-                    self.instance_sets.next()
-                        .add_buffer(instance_subbuf).unwrap()
-                        .build().unwrap()
-                )
-            );
+        if need_sort {
+            dmsort::sort_by(&mut self.sorted, |e1, e2| {
+                let t1 = tran.get(*e1).unwrap();
+                let t2 = tran.get(*e2).unwrap();
+                
+                t1.pos.z.partial_cmp(&t2.pos.z).unwrap()
+            });
         }
 
         // Holds the list of commands that are going to be executed.
@@ -140,34 +150,32 @@ where
                 ]
             ).unwrap();
 
-        // Adds a draw command on the command buffer for each sprite component.
-        for sprite in (&sprite).join() {
-            let mesh = &mesh_list[sprite.mesh_index];
-            let instance_set = sprite.instance_set.as_ref().unwrap();
+        for ent in self.sorted.iter() {
+            if let Some(sprite) = sprite.get_mut(*ent) {
+                let mesh = &mesh_list[sprite.mesh_index];
+                let instance_set = sprite.instance_set.as_ref().unwrap();
 
-            builder = builder.draw_indexed(
-                self.pipeline.clone(),
-                state.clone(),
-                vec![mesh.vertex_buf.clone()], 
-                mesh.index_buf.clone(),
-                (instance_set.clone(), view_proj.clone(), tex_set.clone()),
-                (fs::ty::PER_OBJECT { imgIdx: sprite.image_index })
-            ).unwrap();
-        }
-
-        // Adds a draw command on the command buffer for each sprite component.
-        for map in (&map).join() {
-            let instance_set = map.instance_set.as_ref().unwrap();
-
-            for chunk in &map.chunks {
                 builder = builder.draw_indexed(
                     self.pipeline.clone(),
                     state.clone(),
-                    vec![chunk.vertex_buf.clone()], 
-                    chunk.index_buf.clone(),
+                    vec![mesh.vertex_buf.clone()], 
+                    mesh.index_buf.clone(),
                     (instance_set.clone(), view_proj.clone(), tex_set.clone()),
-                    (fs::ty::PER_OBJECT { imgIdx: map.image_index })
+                    (fs::ty::PER_OBJECT { imgIdx: sprite.image_index })
                 ).unwrap();
+            } else if let Some(map) = map.get_mut(*ent) {
+                let instance_set = map.instance_set.as_ref().unwrap();
+
+                for chunk in &map.chunks {
+                    builder = builder.draw_indexed(
+                        self.pipeline.clone(),
+                        state.clone(),
+                        vec![chunk.vertex_buf.clone()], 
+                        chunk.index_buf.clone(),
+                        (instance_set.clone(), view_proj.clone(), tex_set.clone()),
+                        (fs::ty::PER_OBJECT { imgIdx: map.image_index })
+                    ).unwrap();
+                }
             }
         }
 
@@ -183,10 +191,6 @@ where
     fn setup(&mut self, res: &mut specs::Resources) {
         use specs::prelude::SystemData;
         Self::SystemData::setup(res);
-
-        let mut render_storage: specs::WriteStorage<comp::Sprite> = SystemData::fetch(&res);
-        self.render_ins_read = Some(render_storage.track_inserted());
-        self.render_mod_read = Some(render_storage.track_modified());
 
         let mut tran_storage: specs::WriteStorage<comp::Transform> = SystemData::fetch(&res);
         self.transform_ins_read = Some(tran_storage.track_inserted());        

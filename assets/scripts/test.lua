@@ -4,7 +4,7 @@ stuff = {
   transform = {
     x = 0.0,
     y = 0.0,
-    z = 0.0
+    z = 0.2
   },  
   velocity = {
     x = -0.25,
@@ -21,7 +21,7 @@ stuff2 = {
   transform = {
     x = 0.0,
     y = 0.0,
-    z = 0.0
+    z = 0.2
   },  
   velocity = {
     x = 0.25,

@@ -8,6 +8,7 @@ extern crate vulkano_win;
 extern crate winit;
 #[macro_use]
 extern crate vulkano_shader_derive;
+extern crate dmsort;
 extern crate cgmath;
 extern crate image;
 extern crate specs;
