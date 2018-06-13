@@ -357,10 +357,10 @@ fn main() {
         0,
     );
 
-    tile_map.create_chunk(
+    tile_map.create_strip(
         queue.clone(),
         cgmath::Point3::new(0, 0, 0),
-        [utility::Rect2::new(cgmath::Vector2::new(0.30, 0.30), cgmath::Vector2::new(0.70, 0.70)); 25]
+        [utility::Rect2::new(cgmath::Vector2::new(0.30, 0.30), cgmath::Vector2::new(0.70, 0.70)); 10]
     );
 
     let e = game.world.create_entity()
@@ -369,25 +369,9 @@ fn main() {
         )
         .with(comp::Transform {
             pos: cgmath::Vector3::new(0.0, 0.0, 0.0),
-            bounds: utility::Rect2::new(cgmath::Vector2::new(0.0, 0.0), cgmath::Vector2::new(0.5, 0.5))
         })
         .build(); 
 
-    game.world.add_resource(res::MeshList(vec![
-        res::Mesh::new(
-            vec![
-                Vertex { position: [-0.1, -0.1, 0.0], uv: [0.0, 0.0], },
-                Vertex { position: [0.1, -0.1, 0.0], uv: [1.0, 0.0] },
-                Vertex { position: [-0.1, 0.1, 0.0], uv: [0.0, 1.0] },
-                Vertex { position: [0.1, 0.1, 0.0], uv: [1.0, 1.0] },
-            ],
-            vec![
-                0, 1, 2,
-                1, 2, 3
-            ],
-            queue.clone()
-        )
-    ]));
     game.world.add_resource(res::TextureSet(Some(tex_set)));   
     game.world.add_resource(res::ViewProjectionSet(Some(view_proj_set.clone())));   
     game.world.add_resource(res::Device(Some(device.clone())));   

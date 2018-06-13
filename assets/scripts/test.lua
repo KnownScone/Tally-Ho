@@ -6,12 +6,6 @@ stuff = {
       x = 0.0,
       y = 0.0,
       z = 0.0
-    },
-    bounds = {
-      min_x = -0.1,
-      min_y = -0.1,
-      max_x = 0.1,
-      max_y = 0.1
     }
   },  
   velocity = {
@@ -20,7 +14,18 @@ stuff = {
     z = 0.0
   },
   sprite = {
-    mesh_index = 0,
+    bounds = {
+      min_x = 0.0,
+      min_y = 0.0,
+      max_x = 0.1,
+      max_y = 0.1
+    },
+    uv = {
+      min_x = 0.0,
+      min_y = 0.0,
+      max_x = 1.0,
+      max_y = 1.0
+    },
     image_index = 0,
   }
 }
@@ -29,14 +34,8 @@ stuff2 = {
   transform = {
     position = {
       x = 0.0,
-      y = 0.0,
+      y = -0.5,
       z = 0.0
-    },
-    bounds = {
-      min_x = -0.1,
-      min_y = -0.1,
-      max_x = 0.1,
-      max_y = 0.1
     }
   },  
   velocity = {
@@ -45,7 +44,18 @@ stuff2 = {
     z = 0.0
   },
   sprite = {
-    mesh_index = 0,
+    bounds = {
+      min_x = 0.0,
+      min_y = 0.0,
+      max_x = 0.2,
+      max_y = 0.2
+    },
+    uv = {
+      min_x = 0.0,
+      min_y = 0.0,
+      max_x = 1.0,
+      max_y = 1.0
+    },
     image_index = 0,
   }
 }

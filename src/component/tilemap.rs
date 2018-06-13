@@ -7,7 +7,7 @@ use cgmath::{Point2, Point3, Vector2, Vector3, Transform};
 use vulkano as vk;
 use specs;
 
-const CHUNK_SIZE: Vector2<u32> = Vector2 { x: 5, y: 5 };
+const STRIP_LENGTH: u32 = 10;
 
 pub struct TileMap {
     pub instance_set: Option<Arc<vk::descriptor::DescriptorSet + Send + Sync>>,
@@ -15,7 +15,7 @@ pub struct TileMap {
 
     pub image_index: u32,
 
-    pub chunks: Vec<Chunk>,
+    pub strips: Vec<Strip>,
 }
 
 impl TileMap {
@@ -24,39 +24,40 @@ impl TileMap {
             instance_set: None,
             tile_dims,
             image_index,
-            chunks: Vec::new()
+            strips: Vec::new()
         }
     }
 
-    pub fn create_chunk(&mut self, queue: Arc<vk::device::Queue>, chunk_pos: Point3<u32>, tile_uvs: [Rect2<f32>; (CHUNK_SIZE.x * CHUNK_SIZE.y) as usize]) {
-        let chunk_pos = Vector3::new(
-            (chunk_pos.x * CHUNK_SIZE.x) as f32 * self.tile_dims.x,
-            (chunk_pos.y * CHUNK_SIZE.y) as f32 * self.tile_dims.y,
-            chunk_pos.z as f32 * self.tile_dims.z
+    pub fn create_strip(&mut self, queue: Arc<vk::device::Queue>, strip_pos: Point3<u32>, tile_uvs: [Rect2<f32>; STRIP_LENGTH as usize]) {
+        let world_pos = Vector3::new(
+            (strip_pos.x * STRIP_LENGTH) as f32 * self.tile_dims.x,
+            strip_pos.y as f32 * self.tile_dims.y,
+            strip_pos.z as f32 * self.tile_dims.z
         );
         
         let vertex_data: Vec<_> = tile_uvs.iter().enumerate()
             .flat_map(|(idx, uv)| {
-                let local_pos = Vector2::new(
-                    (idx as f32 % CHUNK_SIZE.x as f32) * self.tile_dims.x,
-                    (idx as f32 / CHUNK_SIZE.y as f32).floor() * self.tile_dims.y,
+                let local_pos = Vector3::new(
+                    idx as f32 * self.tile_dims.x,
+                    0.0,
+                    0.0
                 );
 
                 vec![
                     Vertex {
-                        position: (chunk_pos + local_pos.extend(0.0)).into(),
+                        position: (world_pos + local_pos).into(),
                         uv: [uv.min.x, uv.min.y]
                     },
                     Vertex {
-                        position: (chunk_pos + local_pos.extend(0.0) + Vector3::new(self.tile_dims.x, 0.0, 0.0)).into(),
+                        position: (world_pos + local_pos + Vector3::new(self.tile_dims.x, 0.0, 0.0)).into(),
                         uv: [uv.max.x, uv.min.y]
                     },
                     Vertex {
-                        position: (chunk_pos + local_pos.extend(0.0) + Vector3::new(0.0, self.tile_dims.y, 0.0)).into(),
+                        position: (world_pos + local_pos + Vector3::new(0.0, self.tile_dims.y, 0.0)).into(),
                         uv: [uv.min.x, uv.max.y]
                     },
                     Vertex {
-                        position: (chunk_pos + local_pos.extend(0.0) + Vector3::new(self.tile_dims.x, self.tile_dims.y, 0.0)).into(),
+                        position: (world_pos + local_pos + Vector3::new(self.tile_dims.x, self.tile_dims.y, 0.0)).into(),
                         uv: [uv.max.x, uv.max.y]
                     }
                 ]
@@ -85,15 +86,18 @@ impl TileMap {
             queue.clone()
         ).expect("Couldn't create index buffer");
 
-        self.chunks.push(Chunk {
+        self.strips.push(Strip {
+            pos: strip_pos,
             vertex_buf,
             index_buf
         });
     }
 }
 
-pub struct Chunk {
+pub struct Strip {
     //pub tiles: [u32; (CHUNK_SIZE.x * CHUNK_SIZE.y) as usize],
+    pub pos: Point3<u32>,
+    
     pub vertex_buf: Arc<vk::buffer::ImmutableBuffer<[Vertex]>>,
     pub index_buf: Arc<vk::buffer::ImmutableBuffer<[u32]>>,
 }
