@@ -132,8 +132,24 @@ where
             dmsort::sort_by(&mut self.sorted, |e1, e2| {
                 let t1 = tran.get(*e1).unwrap();
                 let t2 = tran.get(*e2).unwrap();
+
+                use std::cmp::Ordering;
+                let order = t1.pos.z.partial_cmp(&t2.pos.z).unwrap();
                 
-                t1.pos.z.partial_cmp(&t2.pos.z).unwrap()
+                match order {
+                    Ordering::Less => order,
+                    Ordering::Greater => order,
+                    Ordering::Equal => {
+                        let b1 = t1.pos.y + t1.bounds.max.y;
+                        let b2 = t2.pos.y + t2.bounds.max.y;
+                        
+                        if e1.id() == 1 || e2.id() == 1 {
+                            info!("{} - {} - {:?}", b1, b2, b1.partial_cmp(&b2).unwrap());
+                        }
+
+                        b1.partial_cmp(&b2).unwrap()
+                    }
+                }
             });
         }
 
