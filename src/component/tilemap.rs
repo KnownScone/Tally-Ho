@@ -1,8 +1,10 @@
 use ::Vertex;
 use ::utility::Rect2;
+use ::script::ComponentParser;
 
 use std::sync::Arc;
 
+use rlua::{Table, Value as LuaValue, Result as LuaResult, Error as LuaError};
 use cgmath::{Point2, Point3, Vector2, Vector3, Transform};
 use vulkano as vk;
 use specs;
@@ -104,4 +106,32 @@ pub struct Strip {
 
 impl specs::Component for TileMap {
     type Storage = specs::FlaggedStorage<Self, specs::storage::BTreeStorage<Self>>;
+}
+
+impl ComponentParser for TileMap { 
+    fn parse(v: LuaValue) -> LuaResult<Self> {
+        match v {
+            LuaValue::Table(t) => {
+                let tile_dims = {
+                    let t: Table = t.get("tile_dims").expect("Couldn't get tile dimensions");
+                    Vector3::new(
+                        t.get("x").expect("Couldn't get x-dim"), 
+                        t.get("y").expect("Couldn't get y-dim"), 
+                        t.get("z").expect("Couldn't get z-dim")
+                    )
+                };
+
+                Ok(TileMap::new(
+                    tile_dims,
+                    t.get("image_index").expect("Couldn't get image index")
+                ))
+            },
+            LuaValue::Error(err) => Err(err),
+            _ => Err(LuaError::FromLuaConversionError {
+                from: "_",
+                to: "table",
+                message: None, 
+            }),
+        }
+    }
 }

@@ -348,29 +348,23 @@ fn main() {
     script.register::<comp::Transform>("transform");
     script.register::<comp::Sprite>("sprite");
     script.register::<comp::Velocity>("velocity");
+    script.register::<comp::TileMap>("tile_map");
     script.load_file("assets/scripts/test.lua");
 
     let e = script.parse_entity("stuff2", game.world.create_entity()).unwrap();
+    let e = script.parse_entity("stuff_map", game.world.create_entity()).unwrap();
 
-    let mut tile_map = comp::TileMap::new(
-        cgmath::Vector3::new(0.1, 0.1, 0.1),
-        0,
-    );
+    // tile_map.create_strip(
+    //     queue.clone(),
+    //     cgmath::Point3::new(0, 0, 0),
+    //     [utility::Rect2::new(cgmath::Vector2::new(0.30, 0.30), cgmath::Vector2::new(0.70, 0.70)); 10]
+    // );
 
-    tile_map.create_strip(
-        queue.clone(),
-        cgmath::Point3::new(0, 0, 0),
-        [utility::Rect2::new(cgmath::Vector2::new(0.30, 0.30), cgmath::Vector2::new(0.70, 0.70)); 10]
-    );
-
-    let e = game.world.create_entity()
-        .with(
-            tile_map
-        )
-        .with(comp::Transform {
-            pos: cgmath::Vector3::new(0.0, 0.0, 0.0),
-        })
-        .build(); 
+    // tile_map.create_strip(
+    //     queue.clone(),
+    //     cgmath::Point3::new(0, 1, 0),
+    //     [utility::Rect2::new(cgmath::Vector2::new(0.30, 0.30), cgmath::Vector2::new(0.70, 0.70)); 10]
+    // );
 
     game.world.add_resource(res::TextureSet(Some(tex_set)));   
     game.world.add_resource(res::ViewProjectionSet(Some(view_proj_set.clone())));   

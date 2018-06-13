@@ -59,3 +59,21 @@ stuff2 = {
     image_index = 0,
   }
 }
+
+stuff_map = {
+  transform = {
+    position = {
+      x = 0.0,
+      y = 0.0,
+      z = 0.0
+    }
+  },
+  tile_map = {
+    tile_dims = {
+      x = 0.1,
+      y = 0.1,
+      z = 0.1,
+    },
+    image_index = 0,
+  }
+}
