@@ -13,12 +13,19 @@ extern crate cgmath;
 extern crate image;
 extern crate specs;
 extern crate rlua;
+#[macro_use]
+extern crate nom;
+extern crate num_traits;
+#[macro_use]
+extern crate num_derive;
+
 
 mod resource;
 mod component;
 mod utility;
 mod system;
 mod script;
+mod parse;
 mod game;
 
 use resource as res;
