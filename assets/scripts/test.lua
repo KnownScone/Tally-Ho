@@ -34,13 +34,13 @@ stuff2 = {
   transform = {
     position = {
       x = 0.0,
-      y = -0.5,
+      y = 0.25,
       z = 0.0
     }
   },  
   velocity = {
     x = 0.0,
-    y = 0.25,
+    y = -0.1,
     z = 0.0
   },
   sprite = {
@@ -74,6 +74,11 @@ stuff_map = {
       y = 0.1,
       z = 0.1,
     },
+    tex_dims = {
+      x = 5,
+      y = 5,
+    },
     image_index = 0,
+    path = ""
   }
 }

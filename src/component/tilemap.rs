@@ -1,7 +1,9 @@
 use ::Vertex;
 use ::utility::Rect2;
 use ::script::ComponentParser;
+use ::parse;
 
+use std::cmp;
 use std::sync::Arc;
 
 use rlua::{Table, Value as LuaValue, Result as LuaResult, Error as LuaError};
@@ -9,11 +11,14 @@ use cgmath::{Point2, Point3, Vector2, Vector3, Transform};
 use vulkano as vk;
 use specs;
 
-const STRIP_LENGTH: u32 = 10;
+pub const STRIP_LENGTH: u32 = 10;
 
 pub struct TileMap {
     pub instance_set: Option<Arc<vk::descriptor::DescriptorSet + Send + Sync>>,
     pub tile_dims: Vector3<f32>,
+    
+    // how many sub-textures in each dimension
+    pub tex_dims: Vector2<u32>,
 
     pub image_index: u32,
 
@@ -21,87 +26,109 @@ pub struct TileMap {
 }
 
 impl TileMap {
-    pub fn new(tile_dims: Vector3<f32>, image_index: u32) -> TileMap {
+    pub fn new(tile_dims: Vector3<f32>, tex_dims: Vector2<u32>, image_index: u32) -> TileMap {
         TileMap {
             instance_set: None,
             tile_dims,
+            tex_dims,
             image_index,
             strips: Vec::new()
         }
     }
 
-    pub fn create_strip(&mut self, queue: Arc<vk::device::Queue>, strip_pos: Point3<u32>, tile_uvs: [Rect2<f32>; STRIP_LENGTH as usize]) {
-        let world_pos = Vector3::new(
-            (strip_pos.x * STRIP_LENGTH) as f32 * self.tile_dims.x,
-            strip_pos.y as f32 * self.tile_dims.y,
-            strip_pos.z as f32 * self.tile_dims.z
-        );
-        
-        let vertex_data: Vec<_> = tile_uvs.iter().enumerate()
-            .flat_map(|(idx, uv)| {
-                let local_pos = Vector3::new(
-                    idx as f32 * self.tile_dims.x,
-                    0.0,
-                    0.0
-                );
+    pub fn load(&mut self, tile_map: parse::TileMap) {
+        for chunk in tile_map.chunks.iter() {
+            if let Some(layer) = chunk.layers.iter().find(|x| x.property == parse::LayerProperty::TileIndex) {
+                for (idx, strip) in layer.strips.iter().enumerate() {
+                    let strip_pos = Point3::new(
+                        idx as u32 % chunk.dimensions.x,
+                        (idx as f32 / chunk.dimensions.x as f32).floor() as u32,
+                        chunk.pos.z
+                    );
 
-                vec![
-                    Vertex {
-                        position: (world_pos + local_pos).into(),
-                        uv: [uv.min.x, uv.min.y]
-                    },
-                    Vertex {
-                        position: (world_pos + local_pos + Vector3::new(self.tile_dims.x, 0.0, 0.0)).into(),
-                        uv: [uv.max.x, uv.min.y]
-                    },
-                    Vertex {
-                        position: (world_pos + local_pos + Vector3::new(0.0, self.tile_dims.y, 0.0)).into(),
-                        uv: [uv.min.x, uv.max.y]
-                    },
-                    Vertex {
-                        position: (world_pos + local_pos + Vector3::new(self.tile_dims.x, self.tile_dims.y, 0.0)).into(),
-                        uv: [uv.max.x, uv.max.y]
+                    let data: Vec<Option<Rect2<f32>>> = strip.iter()
+                        .map(|idx| {
+                            let subtex_dims = Vector2::new(
+                                1.0 / self.tex_dims.x as f32,
+                                1.0 / self.tex_dims.y as f32
+                            ); 
+
+                            assert!(
+                                (*idx as u32) < self.tex_dims.x * self.tex_dims.y, 
+                                "Texture index ({}) is too large (should be less than {}).", idx, self.tex_dims.x * self.tex_dims.y
+                            );
+
+                            let pos = Point2::new(
+                                (*idx as f32 % self.tex_dims.x as f32) * subtex_dims.x,
+                                (*idx as f32 / self.tex_dims.x as f32).floor() * subtex_dims.y,
+                            );
+
+                            info!("{} - {:?}", idx, pos);
+
+                            Some(Rect2::new(
+                                Vector2::new(pos.x, pos.y),
+                                Vector2::new(pos.x + subtex_dims.x, pos.y + subtex_dims.y)
+                            ))
+                        })
+                    .collect();
+
+                    let mut uvs = [None; 10];
+                    uvs.copy_from_slice(&data[..]);
+
+                    // If the strip exists, set its uvs.
+                    if let Some(strip) = self.strips.iter_mut().find(|x| x.pos == strip_pos) {
+                        strip.set_uvs(uvs);
+                        continue;
                     }
-                ]
-            })
-        .collect();
-
-        let index_data: Vec<_> = tile_uvs.iter().enumerate()
-            .flat_map(|(idx, _)| {
-                let i = idx as u32 * 4;
-                vec![
-                    i, i + 1, i + 2,
-                    i + 1, i + 2, i + 3
-                ]
-            })
-        .collect();
-
-        let (vertex_buf, _) = vk::buffer::ImmutableBuffer::from_iter(
-            vertex_data.iter().cloned(),
-            vk::buffer::BufferUsage::vertex_buffer(),
-            queue.clone()
-        ).expect("Couldn't create vertex buffer");
-
-        let (index_buf, _) = vk::buffer::ImmutableBuffer::from_iter(
-            index_data.iter().cloned(),
-            vk::buffer::BufferUsage::index_buffer(),
-            queue.clone()
-        ).expect("Couldn't create index buffer");
-
-        self.strips.push(Strip {
-            pos: strip_pos,
-            vertex_buf,
-            index_buf
-        });
+                    
+                    // If the strip doesn't exist, make a new one with these uvs.
+                    self.strips.push(Strip {
+                        pos: strip_pos,
+                        uvs: {
+                            uvs
+                        },
+                        vertex_buf: None,
+                        index_buf: None
+                    });
+                }
+            }
+        }
     }
 }
 
 pub struct Strip {
-    //pub tiles: [u32; (CHUNK_SIZE.x * CHUNK_SIZE.y) as usize],
-    pub pos: Point3<u32>,
+    pos: Point3<u32>,
+    uvs: [Option<Rect2<f32>>; STRIP_LENGTH as usize],
     
-    pub vertex_buf: Arc<vk::buffer::ImmutableBuffer<[Vertex]>>,
-    pub index_buf: Arc<vk::buffer::ImmutableBuffer<[u32]>>,
+    pub vertex_buf: Option<Arc<vk::buffer::ImmutableBuffer<[Vertex]>>>,
+    pub index_buf: Option<Arc<vk::buffer::ImmutableBuffer<[u32]>>>,
+}
+
+impl Strip {
+    pub fn pos(&self) -> Point3<u32> {
+        self.pos
+    }
+
+    pub fn uvs(&self) -> [Option<Rect2<f32>>; STRIP_LENGTH as usize] {
+        self.uvs
+    }
+
+    pub fn set_uvs(&mut self, uvs: [Option<Rect2<f32>>; STRIP_LENGTH as usize]) {
+        uvs.iter().enumerate().for_each(|(i, x)| { 
+            // Only override the strip's uv if the overriding value is Some
+            if let Some(_) = *x {
+                self.uvs[i] = *x;
+            }
+        });
+        self.vertex_buf = None;
+        self.index_buf = None;
+    }
+
+    pub fn set_uv(&mut self, pos: usize, uv: Rect2<f32>) {
+        self.uvs[pos] = Some(uv);
+        self.vertex_buf = None;
+        self.index_buf = None;
+    }
 }
 
 impl specs::Component for TileMap {
@@ -112,6 +139,9 @@ impl ComponentParser for TileMap {
     fn parse(v: LuaValue) -> LuaResult<Self> {
         match v {
             LuaValue::Table(t) => {
+                // TODO: Load parse::TileMap from this, then call the component's load function w/ it.
+                let path: String = t.get("path").expect("Couldn't get tile map file path");
+
                 let tile_dims = {
                     let t: Table = t.get("tile_dims").expect("Couldn't get tile dimensions");
                     Vector3::new(
@@ -121,8 +151,17 @@ impl ComponentParser for TileMap {
                     )
                 };
 
+                let tex_dims = {
+                    let t: Table = t.get("tex_dims").expect("Couldn't get texture dimensions");
+                    Vector2::new(
+                        t.get("x").expect("Couldn't get x-dim"), 
+                        t.get("y").expect("Couldn't get y-dim"), 
+                    )
+                };
+
                 Ok(TileMap::new(
                     tile_dims,
+                    tex_dims,
                     t.get("image_index").expect("Couldn't get image index")
                 ))
             },

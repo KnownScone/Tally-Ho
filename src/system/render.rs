@@ -163,9 +163,72 @@ where
             }
         }
 
-        for (ent, map, _) in (&*ent, &map, &self.inserted_render).join() {
-            for (idx, _) in map.strips.iter().enumerate() {
-                self.sorted.push(RenderId::TileStrip(ent, idx));
+        for (ent, mut map, _) in (&*ent, &mut map, &self.inserted_render | &self.modified_render).join() {
+            let dims = map.tile_dims;
+            for (idx, strip) in map.strips.iter_mut().filter(|x| x.vertex_buf.is_none() || x.index_buf.is_none()).enumerate() {
+                let world_pos = Vector3::new(
+                    (strip.pos().x * comp::tilemap::STRIP_LENGTH) as f32 * dims.x,
+                    strip.pos().y as f32 * dims.y,
+                    strip.pos().z as f32 * dims.z
+                );
+
+                let vertex_data: Vec<_> = strip.uvs().iter().filter_map(|x| *x).enumerate()
+                    .flat_map(|(idx, uv)| {
+                        let local_pos = Vector3::new(
+                            idx as f32 * dims.x,
+                            0.0,
+                            0.0
+                        );
+
+                        vec![
+                            Vertex {
+                                position: (world_pos + local_pos).into(),
+                                uv: [uv.min.x, uv.min.y]
+                            },
+                            Vertex {
+                                position: (world_pos + local_pos + Vector3::new(dims.x, 0.0, 0.0)).into(),
+                                uv: [uv.max.x, uv.min.y]
+                            },
+                            Vertex {
+                                position: (world_pos + local_pos + Vector3::new(0.0, dims.y, 0.0)).into(),
+                                uv: [uv.min.x, uv.max.y]
+                            },
+                            Vertex {
+                                position: (world_pos + local_pos + Vector3::new(dims.x, dims.y, 0.0)).into(),
+                                uv: [uv.max.x, uv.max.y]
+                            }
+                        ]
+                    })
+                .collect();
+
+                let index_data: Vec<_> = strip.uvs().iter().filter_map(|x| *x).enumerate()
+                    .flat_map(|(idx, _)| {
+                        let i = idx as u32 * 4;
+                        vec![
+                            i, i + 1, i + 2,
+                            i + 1, i + 2, i + 3
+                        ]
+                    })
+                .collect();
+
+                let (vertex_buf, _) = vk::buffer::ImmutableBuffer::from_iter(
+                    vertex_data.iter().cloned(),
+                    vk::buffer::BufferUsage::vertex_buffer(),
+                    queue.clone()
+                ).expect("Couldn't create vertex buffer");
+
+                let (index_buf, _) = vk::buffer::ImmutableBuffer::from_iter(
+                    index_data.iter().cloned(),
+                    vk::buffer::BufferUsage::index_buffer(),
+                    queue.clone()
+                ).expect("Couldn't create index buffer");
+
+                strip.vertex_buf = Some(vertex_buf);
+                strip.index_buf = Some(index_buf);
+
+                if self.inserted_transform.contains(ent.id()) {
+                    self.sorted.push(RenderId::TileStrip(ent, idx));
+                }
             }
         }
 
@@ -215,7 +278,7 @@ where
                             let t = tran.get(e).unwrap();
                             let m = map.get(e).unwrap();
                             let s = &m.strips[idx];
-                            let b = t.pos.y + (m.tile_dims.y * (s.pos.y + 1) as f32);
+                            let b = t.pos.y + (m.tile_dims.y * (s.pos().y + 1) as f32);
 
                             (t, b)
                         }
@@ -272,12 +335,14 @@ where
                     let strip = &map.strips[idx];
 
                     let instance_set = map.instance_set.as_ref().unwrap();
+                    let v_buf = strip.vertex_buf.as_ref().unwrap();
+                    let i_buf = strip.index_buf.as_ref().unwrap();
 
                     builder = builder.draw_indexed(
                         self.pipeline.clone(),
                         state.clone(),
-                        vec![strip.vertex_buf.clone()],
-                        strip.index_buf.clone(),
+                        vec![v_buf.clone()],
+                        i_buf.clone(),
                         (instance_set.clone(), view_proj.clone(), tex_set.clone()),
                         (fs::ty::PER_OBJECT { imgIdx: map.image_index })
                     ).unwrap();

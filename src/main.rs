@@ -359,19 +359,27 @@ fn main() {
     script.load_file("assets/scripts/test.lua");
 
     let e = script.parse_entity("stuff2", game.world.create_entity()).unwrap();
-    let e = script.parse_entity("stuff_map", game.world.create_entity()).unwrap();
+    // let e = script.parse_entity("stuff_map", game.world.create_entity()).unwrap();
+    
+    let mut tile_map = comp::TileMap::new(
+        cgmath::Vector3::new(0.1, 0.1, 0.1),
+        cgmath::Vector2::new(2, 2),
+        0,
+    );
+    
+    let parsed_tile_map = parse::tile_map(b"\x05\x04dust\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x00\x02\x01\x00\
+    \x00\x00\x00\x01\x00\x00\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\
+    \x00\x02\x00\x03\x00\x02\x00\x03\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01").unwrap().1;
+    tile_map.load(parsed_tile_map);
 
-    // tile_map.create_strip(
-    //     queue.clone(),
-    //     cgmath::Point3::new(0, 0, 0),
-    //     [utility::Rect2::new(cgmath::Vector2::new(0.30, 0.30), cgmath::Vector2::new(0.70, 0.70)); 10]
-    // );
-
-    // tile_map.create_strip(
-    //     queue.clone(),
-    //     cgmath::Point3::new(0, 1, 0),
-    //     [utility::Rect2::new(cgmath::Vector2::new(0.30, 0.30), cgmath::Vector2::new(0.70, 0.70)); 10]
-    // );
+    let e = game.world.create_entity()
+        .with(
+            tile_map
+        )
+        .with(comp::Transform {
+            pos: cgmath::Vector3::new(0.0, 0.0, 0.0),
+        })
+    .build(); 
 
     game.world.add_resource(res::TextureSet(Some(tex_set)));   
     game.world.add_resource(res::ViewProjectionSet(Some(view_proj_set.clone())));   
