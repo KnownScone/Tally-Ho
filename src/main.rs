@@ -41,6 +41,7 @@ use vk::swapchain::{Swapchain};
 use vk::framebuffer::{Framebuffer};
 use vk::buffer::{CpuBufferPool, DeviceLocalBuffer, BufferUsage};
 use vk::command_buffer::{AutoCommandBufferBuilder};
+use vk::descriptor::descriptor_set::FixedSizeDescriptorSetsPool;
 use vk::sync::{now, GpuFuture};
 use vk::device::{Device};
 
@@ -334,19 +335,35 @@ fn main() {
         .build().unwrap());
     info!("Texture set initialized");
 
-    let (render_sys, cmd_buf_rx) = sys::RenderSystem::new(
-        pipeline.clone(), 
-        CpuBufferPool::<vs::ty::Instance>::new(
+    let tile_map_sys = {
+        let instance_sets = FixedSizeDescriptorSetsPool::new(pipeline.clone(), 0);
+        let instance_buf = CpuBufferPool::<vs::ty::Instance>::new(
             device.clone(),
             vk::buffer::BufferUsage::uniform_buffer() | vk::buffer::BufferUsage::transfer_source(),
-        ),
-    );
+        );
+
+        sys::TileMapSystem::new(instance_sets, instance_buf)
+    };
+    
+    let sprite_sys = {
+        let instance_sets = FixedSizeDescriptorSetsPool::new(pipeline.clone(), 0);
+        let instance_buf = CpuBufferPool::<vs::ty::Instance>::new(
+            device.clone(),
+            vk::buffer::BufferUsage::uniform_buffer() | vk::buffer::BufferUsage::transfer_source(),
+        );
+    
+        sys::SpriteSystem::new(instance_sets, instance_buf)
+    };
+
+    let (render_sys, cmd_buf_rx) = sys::RenderSystem::new(pipeline.clone());
 
     let velocity_sys = sys::VelocitySystem;
 
     let mut dispatcher = specs::DispatcherBuilder::new()
-        .with(render_sys, "render", &[])
         .with(velocity_sys, "velocity", &[])
+        .with(sprite_sys, "sprite", &["velocity"])
+        .with(tile_map_sys, "tile_map", &["velocity"])
+        .with(render_sys, "render", &["sprite", "tile_map"])
         .build();
 
     let mut game = game::Game::new(dispatcher);

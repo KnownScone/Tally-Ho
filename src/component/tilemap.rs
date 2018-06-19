@@ -3,11 +3,10 @@ use ::utility::Rect2;
 use ::script::ComponentParser;
 use ::parse;
 
-use std::cmp;
 use std::sync::Arc;
 
 use rlua::{Table, Value as LuaValue, Result as LuaResult, Error as LuaError};
-use cgmath::{Point2, Point3, Vector2, Vector3, Transform};
+use cgmath::{Point2, Point3, Vector2, Vector3};
 use vulkano as vk;
 use specs;
 
@@ -83,6 +82,7 @@ impl TileMap {
                     
                     // If the strip doesn't exist, make a new one with these uvs.
                     self.strips.push(Strip {
+                        is_init: false,
                         pos: strip_pos,
                         uvs: {
                             uvs
@@ -97,6 +97,8 @@ impl TileMap {
 }
 
 pub struct Strip {
+    pub is_init: bool,
+
     pos: Point3<u32>,
     uvs: [Option<Rect2<f32>>; STRIP_LENGTH as usize],
     

@@ -3,6 +3,9 @@ use std::time::Duration;
 
 use vulkano as vk;
 
+mod render;
+pub use self::render::{RenderId, SortedRender};
+
 #[derive(Default)]
 pub struct DeltaTime(pub f32);
 
