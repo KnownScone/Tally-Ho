@@ -9,3 +9,6 @@ pub use self::sprite::{Sprite};
 
 pub mod tilemap;
 pub use self::tilemap::{TileMap};
+
+pub mod collider;
+pub use self::collider::{Collider, Shape};
