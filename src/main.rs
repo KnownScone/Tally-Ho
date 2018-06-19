@@ -375,7 +375,7 @@ fn main() {
     script.register::<comp::TileMap>("tile_map");
     script.load_file("assets/scripts/test.lua");
 
-    let e = script.parse_entity("stuff2", game.world.create_entity()).unwrap();
+    let _e = script.parse_entity("stuff2", game.world.create_entity()).unwrap();
     // let e = script.parse_entity("stuff_map", game.world.create_entity()).unwrap();
     
     let mut tile_map = comp::TileMap::new(
@@ -389,7 +389,7 @@ fn main() {
     \x00\x02\x00\x03\x00\x02\x00\x03\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01").unwrap().1;
     tile_map.load(parsed_tile_map);
 
-    let e = game.world.create_entity()
+    let _e = game.world.create_entity()
         .with(
             tile_map
         )

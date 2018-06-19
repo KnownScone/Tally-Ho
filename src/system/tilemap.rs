@@ -1,5 +1,4 @@
-use ::vs;
-use ::Vertex;
+use ::{vs, Vertex};
 use ::component as comp;
 use ::resource as res;
 
@@ -24,7 +23,6 @@ pub struct TileMapSystem<L> {
     transform_mod_read: Option<specs::ReaderId<specs::ModifiedFlag>>,
     updt_transform: specs::BitSet,
 }
-
 
 impl<L> TileMapSystem<L>
 where
@@ -78,7 +76,7 @@ where
         for (ent, mut map, _) in (&*ent, &mut map, &self.ins_tile_map | &self.mod_tile_map).join() {
             let dims = map.tile_dims;
 
-            // Create the buffers for all the strips without.
+            // Create the vertex and index buffers for all the strips without them.
             for (idx, strip) in map.strips.iter_mut().filter(|x| x.vertex_buf.is_none() || x.index_buf.is_none()).enumerate() {
                 let world_pos = Vector3::new(
                     (strip.pos().x * comp::tilemap::STRIP_LENGTH) as f32 * dims.x,
@@ -146,6 +144,7 @@ where
                     strip.is_init = true;
                 }
 
+                // After updating the tile map strip's data, the tile map strip needs to be resorted.
                 sort_rndr.need_sort = true;
             }
         }
@@ -167,6 +166,7 @@ where
 
             map.instance_set = Some(set);
 
+            // After updating the transform data, the tile map needs to be resorted.
             sort_rndr.need_sort = true;
         }
     }

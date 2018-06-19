@@ -1,5 +1,4 @@
-use ::vs;
-use ::Vertex;
+use ::{vs, Vertex};
 use ::component as comp;
 use ::resource as res;
 
@@ -8,7 +7,7 @@ use std::sync::Arc;
 use vulkano as vk;
 use vk::descriptor::descriptor_set::FixedSizeDescriptorSetsPool;
 use vk::buffer::CpuBufferPool;
-use cgmath::{Vector3, Matrix4};
+use cgmath::{Matrix4};
 use specs;
 
 pub struct SpriteSystem<L> {
@@ -116,10 +115,12 @@ where
 
             spr.index_buf = Some(index_buf);
 
+            // If this sprite has just being initialized, add it to the sorted renders.
             if self.ins_sprite.contains(ent.id()) {
                 sort_rndr.ids.push(res::RenderId::Sprite(ent));
             }
 
+            // After updating the sprite data, the sprite needs to be resorted.
             sort_rndr.need_sort = true;
         }
 
@@ -140,6 +141,7 @@ where
 
             spr.instance_set = Some(set);
 
+            // After updating the transform data, the sprite needs to be resorted.
             sort_rndr.need_sort = true;
         }
     }

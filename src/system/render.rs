@@ -1,4 +1,4 @@
-use ::{vs, fs, Vertex};
+use ::fs;
 use ::component as comp;
 use ::resource as res;
 
@@ -6,10 +6,7 @@ use std::sync::Arc;
 use std::sync::mpsc;
 
 use vulkano as vk;
-use vk::buffer::{CpuBufferPool};
-use vk::descriptor::descriptor_set::{FixedSizeDescriptorSetsPool};
 use vk::command_buffer::{AutoCommandBuffer, AutoCommandBufferBuilder};
-use cgmath::{Matrix4, Vector3};
 use dmsort;
 use specs;
 
@@ -48,15 +45,12 @@ where
         specs::Read<'a, res::ViewProjectionSet>,
         specs::Read<'a, res::TextureSet>,
         specs::Write<'a, res::SortedRender>,
-        specs::Entities<'a>,
         specs::ReadStorage<'a, comp::Sprite>,
         specs::ReadStorage<'a, comp::TileMap>,
         specs::ReadStorage<'a, comp::Transform>
     );
 
-    fn run(&mut self, (device, queue, framebuffer, state, view_proj, tex_set, mut sort_rndr, ent, sprite, map, tran): Self::SystemData) {
-        use specs::Join;
-
+    fn run(&mut self, (device, queue, framebuffer, state, view_proj, tex_set, mut sort_rndr, sprite, map, tran): Self::SystemData) {
         let queue = queue.0.as_ref().unwrap();
         let device = device.0.as_ref().unwrap();
         let framebuffer = framebuffer.0.as_ref().unwrap();

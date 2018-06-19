@@ -1,28 +1,10 @@
 use resource as res;
 
-use std::time::{Instant, Duration};
+use std::time::{Instant};
 
 use specs;
 
-pub struct Scene {
-
-}
-
-impl Scene {
-    pub fn new() -> Scene {
-        Scene {
-            
-        }
-    }
-}
-
 pub struct Game<'a> {
-    // TODO: Resource management
-
-    // Graphical aspect - tilemaps, sprites, vfx, etc.
-    scene: Scene,
-    
-    // TODO: Systems - logic
     dispatcher: specs::Dispatcher<'static, 'a>,
 
     last_update: Option<Instant>,
@@ -40,7 +22,6 @@ impl<'a> Game<'a> {
         dispatcher.setup(&mut world.res);
 
         Game {
-            scene: Scene::new(),
             dispatcher,
             last_update: None,
             world,

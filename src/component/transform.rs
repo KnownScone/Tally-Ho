@@ -1,8 +1,7 @@
-use utility::Rect2;
 use ::script::ComponentParser;
 
 use rlua::{Table, Value as LuaValue, Result as LuaResult, Error as LuaError};
-use cgmath::{Vector2, Vector3};
+use cgmath::{Vector3};
 use specs;
 
 #[derive(Debug)]

@@ -62,8 +62,6 @@ impl TileMap {
                                 (*idx as f32 / self.tex_dims.x as f32).floor() * subtex_dims.y,
                             );
 
-                            info!("{} - {:?}", idx, pos);
-
                             Some(Rect2::new(
                                 Vector2::new(pos.x, pos.y),
                                 Vector2::new(pos.x + subtex_dims.x, pos.y + subtex_dims.y)
