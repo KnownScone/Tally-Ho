@@ -15,7 +15,7 @@ pub enum Shape {
     Circle {
         /* NOTE:
             The circle's origin should default to (pos.x + radius, pos.y + radius) b/c the 
-            transform's position specifies the top-left corner of the entity. 
+            transform's position specifies the top-right corner of the entity. 
         */
         // Used to offset the circle's origin.
         offset: Vector2<f32>,
@@ -23,7 +23,7 @@ pub enum Shape {
     },
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct Bound {
     pub rect: Rect2<f32>,
     pub depth: f32,
@@ -56,9 +56,10 @@ impl Shape {
 #[derive(Debug)]
 pub struct Collider {
     pub shape: Shape,
-    pub bound: Option<Rect2<f32>>,
+    pub bound: Option<Bound>,
 
-    pub last_move: Vector2<f32>
+    pub sweep: bool,
+    pub last_pos: Vector3<f32>
 }
 
 impl Collider {
@@ -66,7 +67,8 @@ impl Collider {
         Collider {
             shape,
             bound: None,
-            last_move: Vector2::zero(),
+            sweep: true,
+            last_pos: Vector3::zero(),
         }
     }
 }

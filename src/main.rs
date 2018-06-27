@@ -19,7 +19,7 @@ extern crate num_traits;
 #[macro_use]
 extern crate num_derive;
 
-
+mod collision;
 mod resource;
 mod component;
 mod utility;
