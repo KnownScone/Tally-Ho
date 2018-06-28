@@ -2,6 +2,7 @@ use ::utility::{Rect2, Rect3};
 use ::component::collider;
 
 use std::collections::hash_map::{HashMap, Entry};
+use std::collections::VecDeque;
 use std::cmp::{min, max};
 
 use cgmath::{Vector2, Vector3, Zero};
@@ -17,7 +18,8 @@ pub struct CollisionObject {
 }
 
 pub struct CollisionWorld {
-    objects: Vec<CollisionObject>,
+    objects: Vec<Option<CollisionObject>>,
+    free_idxs: VecDeque<usize>,
     cells: HashMap<Vector2<i32>, Cell>,
     // TODO: Physical response abstraction
     // TODO: Event system
@@ -27,15 +29,24 @@ impl CollisionWorld {
     pub fn new() -> Self {
         CollisionWorld {
             objects: Vec::new(),
+            free_idxs: VecDeque::new(),
             cells: HashMap::new(),
         }
     }
 
     pub fn insert(&mut self, obj: CollisionObject) -> usize {
-        let grid_bound = self.grid_bound(obj.bound.rect);
+        let grid_bound = self.grid_bound(&obj.bound.rect);
 
-        self.objects.push(obj);
-        let obj_idx = self.objects.len() - 1;
+        let obj_idx =
+            if let Some(idx) = self.free_idxs.pop_front() {
+                // If there's a free index, insert the object there.
+                self.objects[idx] = Some(obj);
+                idx
+            } else {
+                // If there's no free indices, allocate more space for the object.
+                self.objects.push(Some(obj));
+                self.objects.len() - 1
+            };
 
         for cell_x in grid_bound.min.x..grid_bound.max.x {
             for cell_y in grid_bound.min.y..grid_bound.max.y {
@@ -49,13 +60,19 @@ impl CollisionWorld {
     }
 
     pub fn update(&mut self, idx: usize, bound: collider::Bound) {
-        let grid_bound = self.grid_bound(bound.rect);
-        let old_grid_bound = self.grid_bound(self.objects[idx].bound.rect);
+        let (grid_bound, old_grid_bound) = {
+            let obj = self.objects[idx].as_ref().unwrap();
+            (
+                self.grid_bound(&bound.rect),
+                self.grid_bound(&self.objects[idx].as_ref().unwrap().bound.rect)
+            )
+        };
 
-        // Checks if the new grid bound fits is the same as the previous grid bound.
+        // Update the bound.
+        self.objects[idx].as_mut().unwrap().bound = bound;
+
+        // No other updates needed if the new grid bound is the same as the previous grid bound.
         if grid_bound == old_grid_bound {
-            // If so, we're done after setting the bound.
-            self.objects[idx].bound = bound;
             return;
         }
 
@@ -63,7 +80,8 @@ impl CollisionWorld {
         for cell_x in old_grid_bound.min.x..old_grid_bound.max.x {
             for cell_y in old_grid_bound.min.y..old_grid_bound.max.y {
                 // If the old grid bound is still using this cell, we don't need to remove it.
-                if cell_x >= grid_bound.min.x && cell_x < grid_bound.max.x && cell_y >= grid_bound.min.y && cell_y < grid_bound.max.y {
+                if cell_x >= grid_bound.min.x && cell_x < grid_bound.max.x 
+                && cell_y >= grid_bound.min.y && cell_y < grid_bound.max.y {
                     continue;
                 }
 
@@ -87,7 +105,8 @@ impl CollisionWorld {
         for cell_x in grid_bound.min.x..grid_bound.max.x {
             for cell_y in grid_bound.min.y..grid_bound.max.y {
                 // If the old grid bound included this cell, we don't need to update.
-                if cell_x >= old_grid_bound.min.x && cell_x < old_grid_bound.max.x && cell_y >= old_grid_bound.min.y && cell_y < old_grid_bound.max.y {
+                if cell_x >= old_grid_bound.min.x && cell_x < old_grid_bound.max.x 
+                && cell_y >= old_grid_bound.min.y && cell_y < old_grid_bound.max.y {
                     continue;
                 }
 
@@ -99,10 +118,34 @@ impl CollisionWorld {
     }
 
     pub fn remove(&mut self, idx: usize) {
-        // TODO
+        let grid_bound = self.grid_bound(&self.objects[idx].as_ref().unwrap().bound.rect);
+
+        // Remove from cells.
+        for cell_x in grid_bound.min.x..grid_bound.max.x {
+            for cell_y in grid_bound.min.y..grid_bound.max.y {
+                let key = Vector2::new(cell_x, cell_y);
+
+                {
+                    let cell = self.cells.get_mut(&key).expect("Grid cell should exist.");
+                    let cell_idx = cell.objects.iter().position(|x| *x == idx)
+                        .expect("Grid cell does not contain the collision object.");
+
+                    cell.objects.swap_remove(cell_idx);
+                }
+
+                if self.cells.get(&key).expect("Grid cell should exist.").objects.is_empty() {
+                    self.cells.remove(&key);
+                }
+            }
+        }
+
+        // Erase the object data.
+        self.objects[idx] = None;
+        // Open up the index for new inserts.
+        self.free_idxs.push_back(idx);
     }
 
-    fn grid_bound(&self, rect: Rect2<f32>) -> Rect2<i32> {
+    fn grid_bound(&self, rect: &Rect2<f32>) -> Rect2<i32> {
         let min = Vector2::new(
             (rect.min.x / CELL_BOUND.x).floor() as i32,
             (rect.min.y / CELL_BOUND.y).floor() as i32
@@ -136,7 +179,7 @@ impl Cell {
 }
 
 #[test]
-fn collision_test() {
+fn collision() {
     let ecs = specs::World::new();
     let mut world = CollisionWorld::new();
 
@@ -169,4 +212,20 @@ fn collision_test() {
     assert_eq!(world.cells.len(), 2);
     assert_eq!(world.cells.get(&Vector2::new(1, 0)).unwrap().objects, vec![0]);
     assert_eq!(world.cells.get(&Vector2::new(1, 1)).unwrap().objects, vec![0]);
+
+    // Test remove.
+    world.remove(idx1);
+
+    assert_eq!(world.cells.len(), 0);
+
+    let idx1 = world.insert(obj1.clone());
+    let idx2 = world.insert(obj1.clone());
+
+    assert_eq!(world.cells.len(), 1);
+    assert_eq!(world.cells.get(&Vector2::new(0, 0)).unwrap().objects, vec![0, 1]);
+
+    world.remove(idx1);
+
+    assert_eq!(world.cells.len(), 1);
+    assert_eq!(world.cells.get(&Vector2::new(0, 0)).unwrap().objects, vec![1]);
 }
