@@ -16,11 +16,10 @@ pub struct TileMap {
     pub instance_set: Option<Arc<vk::descriptor::DescriptorSet + Send + Sync>>,
     pub tile_dims: Vector3<f32>,
     
-    // how many sub-textures in each dimension
+    // How many sub-textures in each dimension.
     pub tex_dims: Vector2<u32>,
-
     pub image_index: u32,
-
+    
     pub strips: Vec<Strip>,
 }
 
@@ -140,22 +139,22 @@ impl ComponentParser for TileMap {
         match v {
             LuaValue::Table(t) => {
                 // TODO: Load parse::TileMap from this, then call the component's load function w/ it.
-                let path: String = t.get("path").expect("Couldn't get tile map file path");
+                let path: String = t.get("path").expect("Couldn't get path");
 
                 let tile_dims = {
-                    let t: Table = t.get("tile_dims").expect("Couldn't get tile dimensions");
+                    let t: Table = t.get("tile_dimensions").expect("Couldn't get tile dimensions");
                     Vector3::new(
-                        t.get("x").expect("Couldn't get x-dim"), 
-                        t.get("y").expect("Couldn't get y-dim"), 
-                        t.get("z").expect("Couldn't get z-dim")
+                        t.get("x").expect("Couldn't get x"), 
+                        t.get("y").expect("Couldn't get y"), 
+                        t.get("z").expect("Couldn't get z")
                     )
                 };
 
                 let tex_dims = {
-                    let t: Table = t.get("tex_dims").expect("Couldn't get texture dimensions");
+                    let t: Table = t.get("texture_dimensions").expect("Couldn't get texture dimensions");
                     Vector2::new(
-                        t.get("x").expect("Couldn't get x-dim"), 
-                        t.get("y").expect("Couldn't get y-dim"), 
+                        t.get("x").expect("Couldn't get x"), 
+                        t.get("y").expect("Couldn't get y"), 
                     )
                 };
 

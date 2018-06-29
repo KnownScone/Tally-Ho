@@ -3,15 +3,25 @@ g = "hey"
 stuff = {
   transform = {
     position = {
-      x = 0.0,
+      x = 1.0,
       y = 0.0,
       z = 0.0
     }
   },  
   velocity = {
-    x = 0.0,
-    y = -0.25,
+    x = -0.25,
+    y = 0.0,
     z = 0.0
+  },
+  collider = {
+    shape_type = "aabb",
+    shape = {
+      min_x = 0.0,
+      min_y = 0.0,
+      max_x = 0.1,
+      max_y = 0.1,
+    },
+    image_index = 0
   },
   sprite = {
     bounds = {
@@ -33,22 +43,32 @@ stuff = {
 stuff2 = {
   transform = {
     position = {
-      x = 0.0,
-      y = 0.25,
+      x = -1.0,
+      y = 0.0,
       z = 0.0
     }
-  },  
+  }, 
   velocity = {
-    x = 0.0,
-    y = -0.1,
+    x = 0.25,
+    y = 0.0,
     z = 0.0
+  },
+  collider = {
+    shape_type = "aabb",
+    shape = {
+      min_x = 0.0,
+      min_y = 0.0,
+      max_x = 0.1,
+      max_y = 0.1,
+    },
+    image_index = 0
   },
   sprite = {
     bounds = {
       min_x = 0.0,
       min_y = 0.0,
-      max_x = 0.2,
-      max_y = 0.2
+      max_x = 0.1,
+      max_y = 0.1
     },
     uv = {
       min_x = 0.0,
@@ -69,12 +89,12 @@ stuff_map = {
     }
   },
   tile_map = {
-    tile_dims = {
+    tile_dimensions = {
       x = 0.1,
       y = 0.1,
       z = 0.1,
     },
-    tex_dims = {
+    texture_dimensions = {
       x = 5,
       y = 5,
     },

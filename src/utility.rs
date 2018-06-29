@@ -8,7 +8,7 @@ pub struct Rect2<S> {
 
 impl<S: BaseNum> Rect2<S> {
     pub fn new(min: Vector2<S>, max: Vector2<S>) -> Self {
-        assert!(max.x > min.x && max.y > min.y, "Min must be smaller than max.");
+        assert!(max.x >= min.x && max.y >= min.y, "Min must be smaller than or equal to max.");
 
         Rect2 {
             min,
@@ -34,7 +34,7 @@ pub struct Rect3<S> {
 
 impl<S: BaseNum> Rect3<S> {
     pub fn new(min: Vector3<S>, max: Vector3<S>) -> Self {
-        assert!(max.x > min.x && max.y > min.y && max.z > min.z, "Min must be smaller than max.");
+        assert!(max.x >= min.x && max.y >= min.y && max.z >= min.z, "Min must be smaller than or equal to max.");
         Rect3 {
             min,
             max

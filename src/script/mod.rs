@@ -53,7 +53,11 @@ impl Script {
     pub fn parse_entity(&self, name: &str, mut eb: specs::EntityBuilder) -> LuaResult<specs::Entity> {
         let globals = self.lua.globals();
 
-        let ent_table: Table = globals.get(name.clone())?;
+        let ent_table: Table = globals.get(name.clone())
+            .map_err(|x| LuaError::SyntaxError {
+                message: format!("Entity with name \"{}\" does not exist", name),
+                incomplete_input: false,
+            })?;
 
         // TODO: In the case that we have two components of the same type on the same entity, return an error
         for comp_pair in ent_table.pairs::<String, _>() {

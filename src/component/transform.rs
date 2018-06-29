@@ -20,9 +20,9 @@ impl ComponentParser for Transform {
                 let pos = {
                     let t: Table = t.get("position").expect("Couldn't get position");
                     Vector3::new(
-                        t.get("x").expect("Couldn't get x-pos"), 
-                        t.get("y").expect("Couldn't get y-pos"), 
-                        t.get("z").expect("Couldn't get z-pos")
+                        t.get("x").expect("Couldn't get x"), 
+                        t.get("y").expect("Couldn't get y"), 
+                        t.get("z").expect("Couldn't get z")
                     )
                 };
 
