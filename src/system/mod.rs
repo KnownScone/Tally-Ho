@@ -9,3 +9,6 @@ pub use self::tilemap::{TileMapSystem};
 
 mod sprite;
 pub use self::sprite::{SpriteSystem};
+
+mod collision;
+pub use self::collision::{CollisionSystem};

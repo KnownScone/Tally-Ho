@@ -358,11 +358,14 @@ fn main() {
     let (render_sys, cmd_buf_rx) = sys::RenderSystem::new(pipeline.clone());
 
     let velocity_sys = sys::VelocitySystem;
+    
+    let collision_sys = sys::CollisionSystem::new();
 
     let mut dispatcher = specs::DispatcherBuilder::new()
         .with(velocity_sys, "velocity", &[])
-        .with(sprite_sys, "sprite", &["velocity"])
-        .with(tile_map_sys, "tile_map", &["velocity"])
+        .with(collision_sys, "collision", &["velocity"])
+        .with(sprite_sys, "sprite", &["collision"])
+        .with(tile_map_sys, "tile_map", &["collision"])
         .with(render_sys, "render", &["sprite", "tile_map"])
         .build();
 
@@ -373,8 +376,10 @@ fn main() {
     script.register::<comp::Sprite>("sprite");
     script.register::<comp::Velocity>("velocity");
     script.register::<comp::TileMap>("tile_map");
+    script.register::<comp::Collider>("collider");
     script.load_file("assets/scripts/test.lua");
 
+    let _e = script.parse_entity("stuff", game.world.create_entity()).unwrap();
     let _e = script.parse_entity("stuff2", game.world.create_entity()).unwrap();
     // let e = script.parse_entity("stuff_map", game.world.create_entity()).unwrap();
     
@@ -389,14 +394,14 @@ fn main() {
     \x00\x02\x00\x03\x00\x02\x00\x03\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01").unwrap().1;
     tile_map.load(parsed_tile_map);
 
-    let _e = game.world.create_entity()
-        .with(
-            tile_map
-        )
-        .with(comp::Transform {
-            pos: cgmath::Vector3::new(0.0, 0.0, 0.0),
-        })
-    .build(); 
+    // let _e = game.world.create_entity()
+    //     .with(
+    //         tile_map
+    //     )
+    //     .with(comp::Transform {
+    //         pos: cgmath::Vector3::new(0.0, 0.0, 0.0),
+    //     })
+    // .build(); 
 
     game.world.add_resource(res::TextureSet(Some(tex_set)));   
     game.world.add_resource(res::ViewProjectionSet(Some(view_proj_set.clone())));   
