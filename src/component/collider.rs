@@ -1,5 +1,7 @@
 use ::utility::{Rect2, Rect3};
+use ::script::ComponentParser;
 
+use rlua::{Value as LuaValue, Result as LuaResult, Error as LuaError, Table};
 use cgmath::{Zero, Vector2, Vector3};
 use specs;
 
@@ -25,29 +27,23 @@ pub enum Shape {
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct Bound {
-    pub rect: Rect2<f32>,
-    pub depth: f32,
+    pub rect: Rect3<f32>,
 }
 
 impl Shape {
     pub fn bound(&self, pos: Vector3<f32>) -> Bound {
         match self {
             &Shape::AABB(r) => Bound {
-                rect: Rect2::new(
-                    pos.truncate() + r.min,
-                    pos.truncate() + r.max,
+                rect: Rect3::new(
+                    pos + r.extend(0.0, 0.0).min,
+                    pos + r.extend(0.0, 0.0).max,
                 ),
-                depth: pos.z
             },
-            &Shape::Circle { offset: o, radius: r } => {
-                let d = Vector2::new(r*2.0, r*2.0);
-                Bound {
-                    rect: Rect2::new(
-                        pos.truncate() + o,
-                        pos.truncate() + o + d
-                    ),
-                    depth: pos.z
-                }
+            &Shape::Circle { offset: o, radius: r } => Bound {
+                rect: Rect3::new(
+                    pos + o.extend(0.0),
+                    pos + o.extend(0.0) + Vector3::new(r*2.0, r*2.0, 0.0)
+                ),
             },
         }
     }
@@ -59,22 +55,85 @@ pub struct Collider {
     pub bound: Option<Bound>,
 
     pub sweep: bool,
-    pub last_pos: Vector3<f32>
+    pub last_pos: Vector3<f32>,
+
+    // Broad phase index.
+    pub index: Option<usize>,
 }
 
 impl Collider {
-    pub fn new(shape: Shape) -> Collider {
+    pub fn new(shape: Shape, sweep: bool) -> Collider {
         Collider {
             shape,
             bound: None,
-            sweep: true,
+            sweep,
             last_pos: Vector3::zero(),
+            index: None,
         }
     }
 }
 
 impl specs::Component for Collider {
     type Storage = specs::storage::BTreeStorage<Self>;
+}
+
+impl ComponentParser for Collider { 
+    fn parse(v: LuaValue) -> LuaResult<Self> {
+        match v {
+            LuaValue::Table(t) => {
+                let shape_type: String = t.get("shape_type").expect("Couldn't get shape type");
+
+                let shape = match shape_type.as_ref() {
+                    "aabb" => {
+                        let t: Table = t.get("shape").expect("Couldn't get shape");
+
+                        Shape::AABB(
+                            Rect2::new(
+                                Vector2::new(
+                                    t.get("min_x").expect("Couldn't get min x"), 
+                                    t.get("min_y").expect("Couldn't get min y"), 
+                                ),
+                                Vector2::new(
+                                    t.get("max_x").expect("Couldn't get max x"), 
+                                    t.get("max_y").expect("Couldn't get max y"), 
+                                )
+                            )
+                        )
+                    },
+                    "circle" => {
+                        let t: Table = t.get("shape").expect("Couldn't get shape");
+
+                        Shape::Circle {
+                            offset: {
+                                let offset = {
+                                    let t: Table = t.get("offset").expect("Couldn't get offset");
+                                    Vector2::new(
+                                        t.get("x").expect("Couldn't get x"),
+                                        t.get("y").expect("Couldn't get y"),
+                                    )
+                                };
+
+                                offset
+                            },
+                            radius: t.get("radius").expect("Couldn't get radius"),
+                        }
+                    },
+                    _ => panic!("Type is not a valid shape")
+                };
+
+                Ok(Collider::new(
+                    shape,
+                    t.get("sweep").expect("Couldn't get sweep"),
+                ))
+            },
+            LuaValue::Error(err) => Err(err),
+            _ => Err(LuaError::FromLuaConversionError {
+                from: "_",
+                to: "table",
+                message: None, 
+            }),
+        }
+    }
 }
 
 #[test]
