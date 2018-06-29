@@ -1,4 +1,4 @@
-use ::utility::{Rect2};
+use ::utility::{Rect2, Rect3};
 use ::component::collider;
 
 use std::collections::{VecDeque, HashSet, HashMap};
@@ -7,12 +7,12 @@ use std::cmp::{min, max};
 use cgmath::{Vector2};
 use specs;
 
-const CELL_BOUND: Vector2<f32> = Vector2 { x: 1.0, y: 1.0 };
+const CELL_BOUND: Vector2<f32> = Vector2 { x: 0.1, y: 0.1 };
 
 #[derive(Clone)]
 pub struct Object {
-    bound: collider::Bound,
-    entity: specs::Entity,
+    pub bound: collider::Bound,
+    pub entity: specs::Entity,
 }
 
 pub struct BroadPhase {
@@ -20,7 +20,7 @@ pub struct BroadPhase {
     free_idxs: VecDeque<usize>,
     cells: HashMap<Vector2<i32>, Cell>,
 
-    coll_pairs: HashSet<(usize, usize)>,
+    pub coll_pairs: HashSet<(usize, usize)>,
 }
 
 impl BroadPhase {
@@ -54,7 +54,7 @@ impl BroadPhase {
                 self.cells.entry(pos).or_insert(Cell::new())
                     .objects.push(obj_idx);
 
-                self.update_collision_pairs(pos)
+                self.update_collision_pairs(pos);
             }
         }
 
@@ -76,28 +76,27 @@ impl BroadPhase {
         // Remove from old cells.
         for cell_x in old_grid_bound.min.x..old_grid_bound.max.x {
             for cell_y in old_grid_bound.min.y..old_grid_bound.max.y {
+                let pos = Vector2::new(cell_x, cell_y);
+                self.update_collision_pairs(pos);
+
                 // If the old grid bound is still using this cell, we don't need to remove it.
                 if cell_x >= grid_bound.min.x && cell_x < grid_bound.max.x 
                 && cell_y >= grid_bound.min.y && cell_y < grid_bound.max.y {
                     continue;
                 }
 
-                let pos = Vector2::new(cell_x, cell_y);
-
                 {
-                    let cell = self.cells.get_mut(&pos).expect("Grid cell should exist.");
+                    let cell = self.cells.get_mut(&pos).expect("Grid cell should exist");
                     let cell_idx = cell.objects.iter().position(|x| *x == idx)
-                        .expect("Grid cell does not contain the collision object.");
+                        .expect("Grid cell does not contain the collision object");
 
                     cell.objects.swap_remove(cell_idx);
                 }
 
                 // If the cell is now empty of objects, remove it entirely.
-                if self.cells.get(&pos).expect("Grid cell should exist.").objects.is_empty() {
+                if self.cells.get(&pos).expect("Grid cell should exist").objects.is_empty() {
                     self.cells.remove(&pos);
                 // Otherwise, update it collision pairs.
-                } else {
-                    self.update_collision_pairs(pos);
                 }
             }
         }
@@ -106,8 +105,9 @@ impl BroadPhase {
         for cell_x in grid_bound.min.x..grid_bound.max.x {
             for cell_y in grid_bound.min.y..grid_bound.max.y {
                 let pos = Vector2::new(cell_x, cell_y);
+                self.update_collision_pairs(pos);
 
-                // If the old grid bound included this cell, we don't need to update.
+                // If the old grid bound included this cell, we don't need to insert.
                 if cell_x >= old_grid_bound.min.x && cell_x < old_grid_bound.max.x 
                 && cell_y >= old_grid_bound.min.y && cell_y < old_grid_bound.max.y {
                     continue;
@@ -115,9 +115,7 @@ impl BroadPhase {
 
                 self.cells.entry(pos)
                     .or_insert(Cell::new())
-                        .objects.push(idx);
-                
-                self.update_collision_pairs(pos);
+                        .objects.push(idx);                
             }
         }
     }
@@ -131,15 +129,15 @@ impl BroadPhase {
                 let pos = Vector2::new(cell_x, cell_y);
 
                 {
-                    let cell = self.cells.get_mut(&pos).expect("Grid cell should exist.");
+                    let cell = self.cells.get_mut(&pos).expect("Grid cell should exist");
                     let cell_idx = cell.objects.iter().position(|x| *x == idx)
-                        .expect("Grid cell does not contain the collision object.");
+                        .expect("Grid cell does not contain the collision object");
 
                     cell.objects.swap_remove(cell_idx);
                 }
 
                 // If the cell is now empty of objects, remove it entirely.
-                if self.cells.get(&pos).expect("Grid cell should exist.").objects.is_empty() {
+                if self.cells.get(&pos).expect("Grid cell should exist").objects.is_empty() {
                     self.cells.remove(&pos);
                 // Otherwise, update its collision pairs.
                 } else {
@@ -154,7 +152,7 @@ impl BroadPhase {
         self.free_idxs.push_back(idx);
     }
 
-    fn grid_bound(&self, rect: &Rect2<f32>) -> Rect2<i32> {
+    fn grid_bound(&self, rect: &Rect3<f32>) -> Rect2<i32> {
         let min = Vector2::new(
             (rect.min.x / CELL_BOUND.x).floor() as i32,
             (rect.min.y / CELL_BOUND.y).floor() as i32
@@ -172,26 +170,26 @@ impl BroadPhase {
     }
 
     fn update_collision_pairs(&mut self, cell_pos: Vector2<i32>) {
-        let cell = self.cells.get(&cell_pos).expect("Grid cell should exist.");
+        if let Some(cell) = self.cells.get(&cell_pos) {
+            // Brute-force collision checking
+            for c_i in 0..cell.objects.len() {
+                for c_j in c_i+1..cell.objects.len() {
+                    let idx1 = cell.objects[c_i];
+                    let idx2 = cell.objects[c_j];
+                    let obj1 = self.objects[idx1].as_ref()
+                        .expect("Object should exist");
+                    let obj2 = self.objects[idx2].as_ref()
+                        .expect("Object should exist");
 
-        // Brute-force collision checking
-        for c_i in 0..cell.objects.len() {
-            for c_j in c_i+1..cell.objects.len() {
-                let idx1 = cell.objects[c_i];
-                let idx2 = cell.objects[c_j];
-                let obj1 = self.objects[idx1].as_ref()
-                    .expect("Object should exist.");
-                let obj2 = self.objects[idx2].as_ref()
-                    .expect("Object should exist.");
+                    let pair = (min(idx1, idx2), max(idx1, idx2)); 
+                    if obj1.bound.rect.is_intersecting(obj2.bound.rect) {
+                        self.coll_pairs.insert(pair);
+                    } else {
+                        self.coll_pairs.remove(&pair);
+                    }
 
-                let pair = (min(idx1, idx2), max(idx1, idx2)); 
-                if obj1.bound.rect.is_intersecting(obj2.bound.rect) {
-                    self.coll_pairs.insert(pair);
-                } else {
-                    self.coll_pairs.remove(&pair);
+                    // TODO: the insert and remove HashSet functions return bool indicating if the pair was already present; use these for enter/stay/exit collision tracking?
                 }
-
-                // TODO: the insert and remove HashSet functions return bool indicating if the pair was already present; use these for enter/stay/exit collision tracking?
             }
         }
     }
