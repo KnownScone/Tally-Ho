@@ -96,7 +96,6 @@ impl BroadPhase {
                 // If the cell is now empty of objects, remove it entirely.
                 if self.cells.get(&pos).expect("Grid cell should exist").objects.is_empty() {
                     self.cells.remove(&pos);
-                // Otherwise, update it collision pairs.
                 }
             }
         }
@@ -105,7 +104,6 @@ impl BroadPhase {
         for cell_x in grid_bound.min.x..grid_bound.max.x {
             for cell_y in grid_bound.min.y..grid_bound.max.y {
                 let pos = Vector2::new(cell_x, cell_y);
-                self.update_collision_pairs(pos);
 
                 // If the old grid bound included this cell, we don't need to insert.
                 if cell_x >= old_grid_bound.min.x && cell_x < old_grid_bound.max.x 
@@ -115,7 +113,9 @@ impl BroadPhase {
 
                 self.cells.entry(pos)
                     .or_insert(Cell::new())
-                        .objects.push(idx);                
+                        .objects.push(idx);
+
+                self.update_collision_pairs(pos);
             }
         }
     }
