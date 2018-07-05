@@ -3,6 +3,7 @@ use ::component::collider;
 
 use std::collections::{VecDeque, HashSet, HashMap};
 use std::cmp::{min, max};
+use std::iter::Map;
 
 use cgmath::{Vector2};
 use specs;
@@ -68,16 +69,10 @@ impl BroadPhase {
         // Update the bound.
         self.objects[idx].as_mut().unwrap().bound = bound;
 
-        // No other updates needed if the new grid bound is the same as the previous grid bound.
-        if grid_bound == old_grid_bound {
-            return;
-        }
-
         // Remove from old cells.
         for cell_x in old_grid_bound.min.x..old_grid_bound.max.x {
             for cell_y in old_grid_bound.min.y..old_grid_bound.max.y {
                 let pos = Vector2::new(cell_x, cell_y);
-                self.update_collision_pairs(pos);
 
                 // If the old grid bound is still using this cell, we don't need to remove it.
                 if cell_x >= grid_bound.min.x && cell_x < grid_bound.max.x 
@@ -93,10 +88,7 @@ impl BroadPhase {
                     cell.objects.swap_remove(cell_idx);
                 }
 
-                // If the cell is now empty of objects, remove it entirely.
-                if self.cells.get(&pos).expect("Grid cell should exist").objects.is_empty() {
-                    self.cells.remove(&pos);
-                }
+                self.update_collision_pairs(pos);
             }
         }
 
@@ -108,6 +100,8 @@ impl BroadPhase {
                 // If the old grid bound included this cell, we don't need to insert.
                 if cell_x >= old_grid_bound.min.x && cell_x < old_grid_bound.max.x 
                 && cell_y >= old_grid_bound.min.y && cell_y < old_grid_bound.max.y {
+                    // but we do need to update collision first...
+                    self.update_collision_pairs(pos);
                     continue;
                 }
 
@@ -187,11 +181,18 @@ impl BroadPhase {
                     } else {
                         self.coll_pairs.remove(&pair);
                     }
-
-                    // TODO: the insert and remove HashSet functions return bool indicating if the pair was already present; use these for enter/stay/exit collision tracking?
                 }
             }
         }
+    }
+
+    pub fn for_each<F>(&mut self, func: F)
+    where
+        F: FnMut((specs::Entity, specs::Entity))
+    {
+        self.coll_pairs.iter()
+            .map(|&(i1, i2)| (self.objects[i1].as_ref().unwrap().entity, self.objects[i2].as_ref().unwrap().entity))
+            .for_each(func);
     }
 }
 

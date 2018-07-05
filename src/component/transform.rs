@@ -6,7 +6,17 @@ use specs;
 
 #[derive(Debug)]
 pub struct Transform {
+    pub last_pos: Vector3<f32>,
     pub pos: Vector3<f32>,
+}
+
+impl Transform {
+    pub fn new(pos: Vector3<f32>) -> Self {
+        Transform {
+            pos,
+            last_pos: pos,
+        }
+    }
 }
 
 impl specs::Component for Transform {
@@ -26,9 +36,7 @@ impl ComponentParser for Transform {
                     )
                 };
 
-                Ok(Transform {
-                    pos,
-                })
+                Ok(Transform::new(pos))
             },
             LuaValue::Error(err) => Err(err),
             _ => Err(LuaError::FromLuaConversionError {

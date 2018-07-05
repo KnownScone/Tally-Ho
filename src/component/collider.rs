@@ -52,11 +52,9 @@ impl Shape {
 #[derive(Debug)]
 pub struct Collider {
     pub shape: Shape,
-    pub bound: Option<Bound>,
 
     pub sweep: bool,
-    pub last_pos: Vector3<f32>,
-
+    
     // Broad phase index.
     pub index: Option<usize>,
 }
@@ -65,9 +63,7 @@ impl Collider {
     pub fn new(shape: Shape, sweep: bool) -> Collider {
         Collider {
             shape,
-            bound: None,
             sweep,
-            last_pos: Vector3::zero(),
             index: None,
         }
     }
