@@ -1,6 +1,8 @@
 use ::utility::{Rect2, Rect3};
 use ::script::ComponentParser;
 
+use std::ops::Range;
+
 use rlua::{Value as LuaValue, Result as LuaResult, Error as LuaError, Table};
 use cgmath::{Zero, Vector2, Vector3};
 use specs;
@@ -13,7 +15,7 @@ use specs;
 
 #[derive(Debug)]
 pub enum Shape {
-    AABB(Rect2<f32>),
+    AABB(Rect3<f32>),
     Circle {
         /* NOTE:
             The circle's origin should default to (pos.x + radius, pos.y + radius) b/c the 
@@ -22,6 +24,7 @@ pub enum Shape {
         // Used to offset the circle's origin.
         offset: Vector2<f32>,
         radius: f32,
+        depth: Range<f32>,
     },
 }
 
@@ -35,14 +38,14 @@ impl Shape {
         match self {
             &Shape::AABB(r) => Bound {
                 rect: Rect3::new(
-                    pos + r.extend(0.0, 0.0).min,
-                    pos + r.extend(0.0, 0.0).max,
+                    pos + r.min,
+                    pos + r.max,
                 ),
             },
-            &Shape::Circle { offset: o, radius: r } => Bound {
+            &Shape::Circle { offset: o, radius: r, depth: ref d } => Bound {
                 rect: Rect3::new(
-                    pos + o.extend(0.0),
-                    pos + o.extend(0.0) + Vector3::new(r*2.0, r*2.0, 0.0)
+                    pos + o.extend(d.start),
+                    pos + o.extend(d.end) + Vector3::new(r*2.0, r*2.0, 0.0)
                 ),
             },
         }
@@ -84,14 +87,16 @@ impl ComponentParser for Collider {
                         let t: Table = t.get("shape").expect("Couldn't get shape");
 
                         Shape::AABB(
-                            Rect2::new(
-                                Vector2::new(
+                            Rect3::new(
+                                Vector3::new(
                                     t.get("min_x").expect("Couldn't get min x"), 
                                     t.get("min_y").expect("Couldn't get min y"), 
+                                    t.get("min_z").expect("Couldn't get min z"), 
                                 ),
-                                Vector2::new(
+                                Vector3::new(
                                     t.get("max_x").expect("Couldn't get max x"), 
                                     t.get("max_y").expect("Couldn't get max y"), 
+                                    t.get("max_z").expect("Couldn't get max y"), 
                                 )
                             )
                         )
@@ -101,17 +106,16 @@ impl ComponentParser for Collider {
 
                         Shape::Circle {
                             offset: {
-                                let offset = {
-                                    let t: Table = t.get("offset").expect("Couldn't get offset");
-                                    Vector2::new(
-                                        t.get("x").expect("Couldn't get x"),
-                                        t.get("y").expect("Couldn't get y"),
-                                    )
-                                };
-
-                                offset
+                                let t: Table = t.get("offset").expect("Couldn't get offset");
+                                Vector2::new(
+                                    t.get("x").expect("Couldn't get x"),
+                                    t.get("y").expect("Couldn't get y"),
+                                )
                             },
                             radius: t.get("radius").expect("Couldn't get radius"),
+                            depth:
+                                t.get("min_z").expect("Couldn't get min z")
+                                .. t.get("max_z").expect("Couldn't get max z"),
                         }
                     },
                     _ => panic!("Type is not a valid shape")
@@ -137,30 +141,29 @@ fn get_bound() {
     let circle = Shape::Circle {
         offset: Vector2::new(2.0, 2.0),
         radius: 2.0,
+        depth: 0.0..1.0,
     };
 
     let aabb = Shape::AABB(
-        Rect2::new(
-            Vector2::new(0.0, 0.0),
-            Vector2::new(2.0, 2.0)
+        Rect3::new(
+            Vector3::new(0.0, 0.0, 0.0),
+            Vector3::new(2.0, 2.0, 1.0)
         )
     );
 
     let pos = Vector3::new(4.0, 4.0, 0.0);
 
     assert_eq!(circle.bound(pos), Bound {
-        rect: Rect2::new(
-            Vector2::new(6.0, 6.0),
-            Vector2::new(10.0, 10.0),
+        rect: Rect3::new(
+            Vector3::new(6.0, 6.0, 0.0),
+            Vector3::new(10.0, 10.0, 1.0),
         ),
-        depth: 0.0
     });
 
     assert_eq!(aabb.bound(pos), Bound {
-        rect: Rect2::new(
-            Vector2::new(4.0, 4.0),
-            Vector2::new(6.0, 6.0),
+        rect: Rect3::new(
+            Vector3::new(4.0, 4.0, 0.0),
+            Vector3::new(6.0, 6.0, 1.0),
         ),
-        depth: 0.0
     });
 }

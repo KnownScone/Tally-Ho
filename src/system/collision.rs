@@ -91,6 +91,7 @@ impl<'a> specs::System<'a> for CollisionSystem {
                 coll.shape.bound(tran.pos)
             };
 
+
             self.broad_phase.update(coll.index.unwrap(), bound);
         }
 
@@ -109,13 +110,13 @@ impl<'a> specs::System<'a> for CollisionSystem {
                     if let Shape::AABB(r1) = c1.shape {
                         if let Shape::AABB(r2) = c2.shape {
                             let r1 = Rect3::new(
-                                t1.pos + r1.extend(0.0, 0.0).min,
-                                t1.pos + r1.extend(0.0, 0.0).max,
+                                t1.pos + r1.min,
+                                t1.pos + r1.max,
                             );
 
                             let r2 = Rect3::new(
-                                t2.pos + r2.extend(0.0, 0.0).min,
-                                t2.pos + r2.extend(0.0, 0.0).max,
+                                t2.pos + r2.min,
+                                t2.pos + r2.max,
                             );
 
                             let pen1 = penetration_vector(r1, r2);
@@ -123,7 +124,7 @@ impl<'a> specs::System<'a> for CollisionSystem {
 
                             d1 = pen1 / 2.0;
                             d2 = pen2 / 2.0;
-                        } else if let Shape::Circle {offset: o2, radius: r2} = c2.shape {
+                        } else if let Shape::Circle {offset: o2, radius: r2, depth: ref d2} = c2.shape {
                             // TODO: Discrete AABB-Circle collision
                         }
                     }

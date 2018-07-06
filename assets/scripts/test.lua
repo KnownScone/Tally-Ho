@@ -18,8 +18,10 @@ stuff = {
     shape = {
       min_x = 0.0,
       min_y = 0.0,
+      min_z = 0.0,
       max_x = 0.1,
       max_y = 0.1,
+      max_z = 0.1,
     },
     sweep = false
   },
@@ -58,8 +60,10 @@ stuff2 = {
     shape = {
       min_x = 0.0,
       min_y = 0.0,
+      min_z = 0.0,
       max_x = 0.1,
       max_y = 0.1,
+      max_z = 0.1
     },
     sweep = false,
   },
