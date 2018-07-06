@@ -8,7 +8,9 @@ pub struct Rect2<S> {
 
 impl<S: BaseNum> Rect2<S> {
     pub fn new(min: Vector2<S>, max: Vector2<S>) -> Self {
-        assert!(max.x > min.x && max.y > min.y, "Min must be smaller than or equal to max.");
+        if max.x < min.x && max.y < min.y {
+            warn!("Min must be smaller than max.");
+        }
 
         Rect2 {
             min,
@@ -26,9 +28,17 @@ impl<S: BaseNum> Rect2<S> {
     }
 
     pub fn minowski_difference(&self, other: Rect2<S>) -> Rect2<S> {
+        let size = self.max - self.min;
+        let other_size = other.max - other.min;
+
+        let top_left = Vector2::new(
+            self.min.x - other.min.x - other_size.x,
+            self.min.y - other.min.y - other_size.y,
+        );
+
         Rect2 {
-            min: self.min - other.min,
-            max: self.max - other.max
+            min: top_left,
+            max: top_left + (size + other_size)
         }
     }
 }
@@ -41,7 +51,10 @@ pub struct Rect3<S> {
 
 impl<S: BaseNum> Rect3<S> {
     pub fn new(min: Vector3<S>, max: Vector3<S>) -> Self {
-        assert!(max.x > min.x && max.y > min.y && max.z >= min.z, "Min must be smaller than or equal to max.");
+        if max.x < min.x && max.y < min.y && max.z < min.z {
+            warn!("Min must be smaller than max.");
+        }
+
         Rect3 {
             min,
             max
@@ -55,8 +68,7 @@ impl<S: BaseNum> Rect3<S> {
     pub fn is_intersecting(self, other: Self) -> bool {
         (self.min.x < other.max.x && self.max.x > other.min.x) &&
         (self.min.y < other.max.y && self.max.y > other.min.y) &&
-        // : Only having the z check for equalness is some wonky shit, ya think we should just retire the ol' z-axis and return to int-based layers?
-        (self.min.z <= other.max.z && self.max.z >= other.min.z)
+        (self.min.z < other.max.z && self.max.z > other.min.z)
     }
 
     pub fn minowski_difference(&self, other: Rect3<S>) -> Rect3<S> {
@@ -90,6 +102,13 @@ pub fn closest_bounds_point_to_point(rect: Rect3<f32>, point: Vector3<f32>) -> V
     } if (rect.min.y - point.y).abs() <= min_dist {
         min_dist = (rect.min.y - point.y).abs();
         bounds_point = Vector3::new(point.x, rect.min.y, point.z);
+    
+    } if (rect.max.z - point.z).abs() <= min_dist {
+        min_dist = (rect.max.z - point.z).abs();
+        bounds_point = Vector3::new(point.x, point.y, rect.max.z);
+    } if (rect.min.z - point.z).abs() <= min_dist {
+        min_dist = (rect.min.z - point.z).abs();
+        bounds_point = Vector3::new(point.x, point.y, rect.min.z);
     }
 
     bounds_point
