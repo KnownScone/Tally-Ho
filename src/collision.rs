@@ -5,7 +5,7 @@ use std::collections::{VecDeque, HashSet, HashMap};
 use std::cmp::{min, max};
 use std::iter::Map;
 
-use cgmath::{Vector2};
+use cgmath::{Vector2, Vector3, Zero};
 use specs;
 
 const CELL_BOUND: Vector2<f32> = Vector2 { x: 0.1, y: 0.1 };
@@ -117,10 +117,15 @@ impl BroadPhase {
     pub fn remove(&mut self, idx: usize) {
         let grid_bound = self.grid_bound(&self.objects[idx].as_ref().unwrap().bound.rect);
 
+        // Lazy hack: set the rect so it doesn't collide with anything (takes up no space) before updating collision pairs.
+        self.objects[idx].as_mut().unwrap().bound.rect = Rect3::new(Vector3::zero(), Vector3::zero());
+
         // Remove from cells.
         for cell_x in grid_bound.min.x..grid_bound.max.x {
             for cell_y in grid_bound.min.y..grid_bound.max.y {
                 let pos = Vector2::new(cell_x, cell_y);
+
+                self.update_collision_pairs(pos);
 
                 {
                     let cell = self.cells.get_mut(&pos).expect("Grid cell should exist");
@@ -128,14 +133,6 @@ impl BroadPhase {
                         .expect("Grid cell does not contain the collision object");
 
                     cell.objects.swap_remove(cell_idx);
-                }
-
-                // If the cell is now empty of objects, remove it entirely.
-                if self.cells.get(&pos).expect("Grid cell should exist").objects.is_empty() {
-                    self.cells.remove(&pos);
-                // Otherwise, update its collision pairs.
-                } else {
-                    self.update_collision_pairs(pos);
                 }
             }
         }
@@ -209,58 +206,6 @@ impl Cell {
 }
 
 #[test]
-fn collision_storage() {
-    let ecs = specs::World::new();
-    let mut bp = BroadPhase::new();
-
-    let e1 = ecs.create_entity_unchecked().build();
-    let obj1 = Object {
-        bound: collider::Bound {
-            rect: Rect2::new(
-                Vector2::new(0.0, 0.0),
-                Vector2::new(1.0, 1.0)
-            ),
-            depth: 0.0,
-        },
-        entity: e1,
-    };
-
-    let idx1 = bp.insert(obj1.clone());
-
-    assert_eq!(bp.cells.len(), 1);
-    assert_eq!(bp.cells.get(&Vector2::new(0, 0)).unwrap().objects, vec![0]);
-
-    // Test update.
-    bp.update(idx1, collider::Bound {
-        rect: Rect2::new(
-            Vector2::new(1.0, 0.0),
-            Vector2::new(2.0, 2.0)
-        ),
-        depth: 0.0,
-    });
-
-    assert_eq!(bp.cells.len(), 2);
-    assert_eq!(bp.cells.get(&Vector2::new(1, 0)).unwrap().objects, vec![0]);
-    assert_eq!(bp.cells.get(&Vector2::new(1, 1)).unwrap().objects, vec![0]);
-
-    // Test remove.
-    bp.remove(idx1);
-
-    assert_eq!(bp.cells.len(), 0);
-
-    let idx1 = bp.insert(obj1.clone());
-    let idx2 = bp.insert(obj1.clone());
-
-    assert_eq!(bp.cells.len(), 1);
-    assert_eq!(bp.cells.get(&Vector2::new(0, 0)).unwrap().objects, vec![0, 1]);
-
-    bp.remove(idx1);
-
-    assert_eq!(bp.cells.len(), 1);
-    assert_eq!(bp.cells.get(&Vector2::new(0, 0)).unwrap().objects, vec![1]);
-}
-
-#[test]
 fn collision_pairs() {
     let ecs = specs::World::new();
     let mut bp = BroadPhase::new();
@@ -268,11 +213,10 @@ fn collision_pairs() {
     let e1 = ecs.create_entity_unchecked().build();
     let obj1 = Object {
         bound: collider::Bound {
-            rect: Rect2::new(
-                Vector2::new(0.25, 0.25),
-                Vector2::new(0.75, 0.75)
+            rect: Rect3::new(
+                Vector3::new(0.0, 0.0, 0.0),
+                Vector3::new(0.75, 0.75, 1.0)
             ),
-            depth: 0.0,
         },
         entity: e1,
     };
@@ -280,11 +224,10 @@ fn collision_pairs() {
     let e2 = ecs.create_entity_unchecked().build();
     let obj2 = Object {
         bound: collider::Bound {
-            rect: Rect2::new(
-                Vector2::new(0.0, 0.0),
-                Vector2::new(1.0, 0.25)
+            rect: Rect3::new(
+                Vector3::new(0.74, 0.0, 0.0),
+                Vector3::new(1.0, 1.0, 1.0)
             ),
-            depth: 0.0,
         },
         entity: e1,
     };
@@ -292,11 +235,10 @@ fn collision_pairs() {
     let e3 = ecs.create_entity_unchecked().build();
     let obj3 = Object {
         bound: collider::Bound {
-            rect: Rect2::new(
-                Vector2::new(0.75, 0.0),
-                Vector2::new(1.0, 1.0)
+            rect: Rect3::new(
+                Vector3::new(0.0, 0.74, 0.0),
+                Vector3::new(1.0, 1.0, 1.0)
             ),
-            depth: 0.0,
         },
         entity: e1,
     };
@@ -305,7 +247,8 @@ fn collision_pairs() {
     let idx2 = bp.insert(obj2.clone());
     let idx3 = bp.insert(obj3.clone());
 
-    println!("{:?}", bp.coll_pairs);
-
     assert_eq!(bp.coll_pairs.len(), 3);
+
+    bp.remove(idx1);
+    assert_eq!(bp.coll_pairs.len(), 1);
 }
