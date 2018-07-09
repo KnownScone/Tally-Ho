@@ -81,9 +81,9 @@ impl<'a> specs::System<'a> for CollisionSystem {
                             old_bound.rect.min.z.min(new_bound.rect.min.z),
                         ),
                         Vector3::new(
-                            old_bound.rect.max.x.min(new_bound.rect.max.x),
-                            old_bound.rect.max.y.min(new_bound.rect.max.y),
-                            old_bound.rect.max.z.min(new_bound.rect.max.z),
+                            old_bound.rect.max.x.max(new_bound.rect.max.x),
+                            old_bound.rect.max.y.max(new_bound.rect.max.y),
+                            old_bound.rect.max.z.max(new_bound.rect.max.z),
                         )
                     )
                 }
