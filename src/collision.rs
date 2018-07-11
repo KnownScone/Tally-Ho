@@ -10,7 +10,7 @@ use specs;
 
 const CELL_BOUND: Vector2<f32> = Vector2 { x: 0.1, y: 0.1 };
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Object {
     pub bound: collider::Bound,
     pub entity: specs::Entity,
@@ -21,7 +21,7 @@ pub struct BroadPhase {
     free_idxs: VecDeque<usize>,
     cells: HashMap<Vector2<i32>, Cell>,
 
-    pub coll_pairs: HashSet<(usize, usize)>,
+    coll_pairs: HashSet<(usize, usize)>,
 }
 
 impl BroadPhase {
@@ -69,7 +69,6 @@ impl BroadPhase {
         // Update the bound.
         self.objects[idx].as_mut().unwrap().bound = bound;
 
-        // Remove from old cells.
         for cell_x in old_grid_bound.min.x..old_grid_bound.max.x {
             for cell_y in old_grid_bound.min.y..old_grid_bound.max.y {
                 let pos = Vector2::new(cell_x, cell_y);
@@ -80,15 +79,11 @@ impl BroadPhase {
                     continue;
                 }
 
-                {
-                    let cell = self.cells.get_mut(&pos).expect("Grid cell should exist");
-                    let cell_idx = cell.objects.iter().position(|x| *x == idx)
-                        .expect("Grid cell does not contain the collision object");
+                let cell = self.cells.get_mut(&pos).expect("Grid cell should exist");
+                let cell_idx = cell.objects.iter().position(|x| *x == idx)
+                    .expect("Grid cell does not contain the collision object");
 
-                    cell.objects.swap_remove(cell_idx);
-                }
-
-                self.update_collision_pairs(pos);
+                cell.objects.swap_remove(cell_idx);
             }
         }
 
@@ -125,15 +120,11 @@ impl BroadPhase {
             for cell_y in grid_bound.min.y..grid_bound.max.y {
                 let pos = Vector2::new(cell_x, cell_y);
 
-                self.update_collision_pairs(pos);
+                let cell = self.cells.get_mut(&pos).expect("Grid cell should exist");
+                let cell_idx = cell.objects.iter().position(|x| *x == idx)
+                    .expect("Grid cell does not contain the collision object");
 
-                {
-                    let cell = self.cells.get_mut(&pos).expect("Grid cell should exist");
-                    let cell_idx = cell.objects.iter().position(|x| *x == idx)
-                        .expect("Grid cell does not contain the collision object");
-
-                    cell.objects.swap_remove(cell_idx);
-                }
+                cell.objects.swap_remove(cell_idx);
             }
         }
 
@@ -175,8 +166,6 @@ impl BroadPhase {
                     let pair = (min(idx1, idx2), max(idx1, idx2)); 
                     if obj1.bound.rect.is_intersecting(obj2.bound.rect) {
                         self.coll_pairs.insert(pair);
-                    } else {
-                        self.coll_pairs.remove(&pair);
                     }
                 }
             }
@@ -187,8 +176,17 @@ impl BroadPhase {
     where
         F: FnMut((specs::Entity, specs::Entity))
     {
-        self.coll_pairs.iter()
-            .map(|&(i1, i2)| (self.objects[i1].as_ref().unwrap().entity, self.objects[i2].as_ref().unwrap().entity))
+        let objects = &self.objects;
+        self.coll_pairs.drain()
+            .filter_map(|(i1, i2)| {
+                let e1 = objects[i1].as_ref().map(|x| x.entity);
+                let e2 = objects[i2].as_ref().map(|x| x.entity);
+                if let Some(e1) = e1 { if let Some(e2) = e2 {
+                    return Some((e1, e2));
+                }}
+
+                None
+            })
             .for_each(func);
     }
 }
@@ -247,8 +245,18 @@ fn collision_pairs() {
     let idx2 = bp.insert(obj2.clone());
     let idx3 = bp.insert(obj3.clone());
 
-    assert_eq!(bp.coll_pairs.len(), 3);
+    let mut len = 0;
+    bp.for_each(|x| {
+        len+=1;
+    });
+    assert_eq!(len, 3);
 
     bp.remove(idx1);
-    assert_eq!(bp.coll_pairs.len(), 1);
+    bp.update(idx2, obj2.clone().bound);
+    bp.update(idx3, obj3.clone().bound);
+    let mut len = 0;
+    bp.for_each(|x| {
+        len+=1;
+    });
+    assert_eq!(len, 1);
 }
