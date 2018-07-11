@@ -1,4 +1,6 @@
-use cgmath::{BaseNum, Zero, Vector2, Vector3};
+use std::f32;
+
+use cgmath::{BaseNum, Array, Zero, One, Vector2, Vector3, InnerSpace};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Rect2<S> {
@@ -117,4 +119,59 @@ pub fn closest_bounds_point_to_point(rect: Rect3<f32>, point: Vector3<f32>) -> V
 pub fn penetration_vector(r1: Rect3<f32>, r2: Rect3<f32>) -> Vector3<f32> {
     let md = r2.minowski_difference(r1);
     closest_bounds_point_to_point(md, Vector3::zero())
+}
+
+pub fn sweep_aabb(aabb1: Rect3<f32>, pos1: Vector3<f32>, disp1: Vector3<f32>, aabb2: Rect3<f32>, pos2: Vector3<f32>, disp2: Vector3<f32>) -> Option<(f32, f32)> {
+    let aabb1 = Rect3::new(
+        pos1 + aabb1.min,
+        pos1 + aabb1.max,
+    );
+    let aabb2 = Rect3::new(
+        pos2 + aabb2.min,
+        pos2 + aabb2.max,
+    );
+    // Use relative velocity, essentially treating aabb1 as stationary.
+    let v = disp2 - disp1;
+
+    // Initialize times of first and last contact
+    let mut t_first = 0.0;
+    let mut t_last = 1.0;
+    
+    // For each axis, determine times of first and last contact, if any
+    for i in 0..3 {
+        if v[i] < 0.0 {
+            if aabb2.max[i] < aabb1.min[i] { return None; } // Nonintersecting and moving apart
+            if aabb1.max[i] < aabb2.min[i] { t_first = ((aabb1.max[i] - aabb2.min[i]) / v[i]).max(t_first); }
+            if aabb2.max[i] > aabb1.min[i] { t_last  = ((aabb1.min[i] - aabb2.max[i]) / v[i]).min(t_last); }
+        }
+        if v[i] > 0.0 {
+            if aabb2.min[i] > aabb1.max[i] { return None; } // Nonintersecting and moving apart
+            if aabb2.max[i] < aabb1.min[i] { t_first = ((aabb1.min[i] - aabb2.max[i]) / v[i]).max(t_first); }
+            if aabb1.max[i] > aabb2.min[i] { t_last = ((aabb1.max[i] - aabb2.min[i]) / v[i]).min(t_last); }
+        }
+
+        // No overlap possible if time of first contact occurs after time of last contact
+        if t_first > t_last { return None; };
+    }
+    
+    Some((t_first, t_last))
+}
+
+#[test]
+fn test_sweep_aabb() {
+    let aabb = Rect3::new(
+        Vector3::new(0.0, 0.0, 0.0),
+        Vector3::new(1.0, 1.0, 1.0),
+    );
+
+    let pos1 = Vector3::new(-3.0, 0.0, 0.0);
+    let disp1 = Vector3::new(6.0, 0.0, 0.0);
+    
+    let pos2 = Vector3::new(3.0, 0.0, 0.0);
+    let disp2 = Vector3::new(-6.0, 0.0, 0.0);
+
+    let (t_first, t_last) = sweep_aabb(aabb, pos1, disp1, aabb, pos2, disp2)
+        .expect("No hit");
+
+    assert_eq!((t_first + t_last) / 2.0, 0.5);
 }
