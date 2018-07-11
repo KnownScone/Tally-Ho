@@ -9,8 +9,8 @@ stuff = {
     }
   },  
   velocity = {
-    x = -0.2,
-    y = 0.0,
+    x = -10.0,
+    y = 1.0,
     z = 0.0
   },
   collider = {
@@ -23,7 +23,7 @@ stuff = {
       max_y = 0.1,
       max_z = 0.1,
     },
-    sweep = false
+    sweep = true
   },
   sprite = {
     bounds = {
@@ -51,8 +51,8 @@ stuff2 = {
     }
   }, 
   velocity = {
-    x = 0.2,
-    y = 0.0,
+    x = 10.0,
+    y = 1.0,
     z = 0.0
   },
   collider = {
@@ -65,7 +65,7 @@ stuff2 = {
       max_y = 0.1,
       max_z = 0.1
     },
-    sweep = false,
+    sweep = true,
   },
   sprite = {
     bounds = {

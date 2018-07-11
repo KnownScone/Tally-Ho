@@ -1,7 +1,9 @@
-use ::utility::{Rect2, Rect3, penetration_vector};
+use ::utility::{Rect2, Rect3, penetration_vector, sweep_aabb};
 use ::collision as coll;
 use ::component as comp;
-use comp::collider::*; 
+use comp::collider::*;
+
+use std::f32;
 
 use cgmath::{InnerSpace, Vector2, Vector3, Zero};
 use specs;
@@ -91,13 +93,14 @@ impl<'a> specs::System<'a> for CollisionSystem {
                 coll.shape.bound(tran.pos)
             };
 
-
             self.broad_phase.update(coll.index.unwrap(), bound);
         }
 
         self.broad_phase.for_each(|(e1, e2)| {
-            let mut d1 = Vector3::zero();
-            let mut d2 = Vector3::zero();
+            let mut new_pos1 = None;
+            let mut new_pos2 = None;
+            let mut new_dir1 = None;
+            let mut new_dir2 = None;
             
             {
                 let c1 = coll.get(e1).unwrap();
@@ -105,54 +108,91 @@ impl<'a> specs::System<'a> for CollisionSystem {
                 let t1 = tran.get(e1).unwrap();
                 let t2 = tran.get(e2).unwrap();
 
-                // This is a discrete collision, we can solve immediately.
-                if !c1.sweep && !c2.sweep {
-                    if let Shape::AABB(r1) = c1.shape {
-                        if let Shape::AABB(r2) = c2.shape {
-                            let r1 = Rect3::new(
-                                t1.pos + r1.min,
-                                t1.pos + r1.max,
-                            );
+                match (&c1.shape, &c2.shape) {
+                    // Discrete AABB-AABB collision.
+                    (&Shape::AABB(r1), &Shape::AABB(r2)) 
+                    if !c1.sweep && !c2.sweep => {
+                        let r1 = Rect3::new(
+                            t1.pos + r1.min,
+                            t1.pos + r1.max,
+                        );
 
-                            let r2 = Rect3::new(
-                                t2.pos + r2.min,
-                                t2.pos + r2.max,
-                            );
+                        let r2 = Rect3::new(
+                            t2.pos + r2.min,
+                            t2.pos + r2.max,
+                        );
 
-                            let pen1 = penetration_vector(r1, r2);
-                            let pen2 = penetration_vector(r2, r1);
+                        let pen = penetration_vector(r1, r2);
 
-                            d1 = pen1 / 2.0;
-                            d2 = pen2 / 2.0;
-                        } else if let Shape::Circle {offset: o2, radius: r2, depth: ref d2} = c2.shape {
-                            // TODO: Discrete AABB-Circle collision
+                        if pen != Vector3::zero() {
+                            new_pos1 = Some(t1.pos + pen / 2.0);
+                            new_pos2 = Some(t2.pos - pen / 2.0);
+                        } else {
+                            new_dir1 = Some(pen.normalize());
+                            new_dir2 = Some(-pen.normalize());
                         }
-                    }
-                } else {
-                    // TODO: Sweep collisions
+                    },
+                    // Discrete AABB-Circle collision.
+                    (&Shape::AABB(r), &Shape::Circle{offset: c_o, radius: c_r, depth: ref c_d}) 
+                        | (&Shape::Circle{offset: c_o, radius: c_r, depth: ref c_d}, &Shape::AABB(r))
+                    if !c1.sweep && !c2.sweep => {
+                        // TODO
+                    },
+                    // Discrete Circle-Circle collision.
+                    (&Shape::Circle{offset: c1_o, radius: c1_r, depth: ref c1_d}, &Shape::Circle{offset: c2_o, radius: c2_r, depth: ref c2_d}) 
+                    if !c1.sweep && !c2.sweep => {
+                        // TODO
+                    },
+                    // Sweep AABB-AABB collision.
+                    (&Shape::AABB(r1), &Shape::AABB(r2)) 
+                    if c1.sweep || c2.sweep => {
+                        let disp1 = t1.pos - t1.last_pos;
+                        let disp2 = t2.pos - t2.last_pos;
+
+                        if let Some((t_first, t_last)) = sweep_aabb(r1, t1.last_pos, disp1, r2, t2.last_pos, disp2) {
+                            let d1 = disp1 * (t_first - f32::EPSILON);
+                            
+                            new_pos1 = Some(t1.last_pos + d1);
+                            new_dir1 = Some(-d1.normalize().map(|x| if x.is_nan() {0.0} else {x}));
+                        }
+                        if let Some((t_first, t_last)) = sweep_aabb(r2, t2.last_pos, disp2, r1, t1.last_pos, disp1) {
+                            let d2 = disp2 * (t_first - f32::EPSILON);
+                            
+                            new_pos2 = Some(t2.last_pos + d2);
+                            new_dir2 = Some(-d2.normalize().map(|x| if x.is_nan() {0.0} else {x}));
+                        }
+                    },
+                    // Sweep AABB-Circle collision.
+                    (&Shape::AABB(r), &Shape::Circle{offset: c_o, radius: c_r, depth: ref c_d}) 
+                        | (&Shape::Circle{offset: c_o, radius: c_r, depth: ref c_d}, &Shape::AABB(r))
+                    if c1.sweep || c2.sweep => {
+                        // TODO
+                    }, 
+                    // Sweep Circle-Circle collision.
+                    (&Shape::Circle{offset: c1_o, radius: c1_r, depth: ref c1_d}, &Shape::Circle{offset: c2_o, radius: c2_r, depth: ref c2_d}) 
+                    if c1.sweep || c2.sweep => {
+                        // TODO
+                    },
+                    _ => ()
                 }
             }
 
-            if d1 != Vector3::zero() {
+            if let Some(pos) = new_pos1 {
                 let t = tran.get_mut(e1).unwrap();
+                t.pos = pos;
+            } 
+            if let Some(dir) = new_dir1 {
                 let v = vel.get_mut(e1).unwrap();
-                t.last_pos = t.pos;
-                t.pos += d1;
-
-                let mag = v.pos.magnitude();
-                let norm = d1.normalize();
-                v.pos = norm * mag;
-            } if d2 != Vector3::zero() {
-                let t = tran.get_mut(e2).unwrap();
-                let v = vel.get_mut(e2).unwrap();
-                t.last_pos = t.pos;
-                t.pos += d2;
-                
-                let mag = v.pos.magnitude().abs();
-                let norm = d2.normalize();
-                v.pos = norm * mag;
+                v.pos = dir * v.pos.magnitude();
             }
-
+            if let Some(pos) = new_pos2 {
+                let t = tran.get_mut(e2).unwrap();
+                t.pos = pos;
+            } 
+            if let Some(dir) = new_dir2 {
+                let v = vel.get_mut(e2).unwrap();
+                v.pos = dir * v.pos.magnitude();
+            }
         });
     }
 
