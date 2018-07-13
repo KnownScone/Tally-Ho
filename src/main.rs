@@ -361,15 +361,18 @@ fn main() {
     
     let collision_sys = sys::CollisionSystem::new();
 
-    let mut dispatcher = specs::DispatcherBuilder::new()
+    let mut logic_disp = specs::DispatcherBuilder::new()
         .with(velocity_sys, "velocity", &[])
         .with(collision_sys, "collision", &["velocity"])
-        .with(sprite_sys, "sprite", &["collision"])
-        .with(tile_map_sys, "tile_map", &["collision"])
+        .build();
+
+    let mut render_disp = specs::DispatcherBuilder::new()
+        .with(sprite_sys, "sprite", &[])
+        .with(tile_map_sys, "tile_map", &[])
         .with(render_sys, "render", &["sprite", "tile_map"])
         .build();
 
-    let mut game = game::Game::new(dispatcher);
+    let mut game = game::Game::new(1.0/60.0, logic_disp, render_disp);
 
     let mut script = script::Script::new();
     script.register::<comp::Transform>("transform");
