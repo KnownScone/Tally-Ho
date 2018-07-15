@@ -46,7 +46,7 @@ impl Script {
         file.read_to_string(&mut contents)
             .expect("Couldn't read the file");
         
-        self.lua.exec::<()>(&contents, Some("test.lua"))
+        self.lua.exec::<()>(&contents, Some(path))
             .expect("Script failed to execute");
     }
 
