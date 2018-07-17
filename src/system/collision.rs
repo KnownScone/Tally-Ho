@@ -153,13 +153,13 @@ impl<'a> specs::System<'a> for CollisionSystem {
                     (&Shape::AABB(r1), &Shape::AABB(r2)) 
                     if c1.sweep || c2.sweep => { 
                         if let Some((t_first, t_last)) = sweep_aabb(r1, t1.last_pos, disp1, r2, t2.last_pos, disp2) {
-                            let d1 = disp1 * (t_first - f32::EPSILON);
+                            let d1 = (disp1 * t_first).map(|x| x - x.signum() * f32::EPSILON);
                             
                             new_pos1 = Some(t1.last_pos + d1);
                             new_dir1 = Some(-v1.pos.normalize().map(|x| if x.is_nan() {0.0} else {x}));
                         }
                         if let Some((t_first, t_last)) = sweep_aabb(r2, t2.last_pos, disp2, r1, t1.last_pos, disp1) {
-                            let d2 = disp2 * (t_first - f32::EPSILON);
+                            let d2 = (disp2 * t_first).map(|x| x - x.signum() * f32::EPSILON);
                             
                             new_pos2 = Some(t2.last_pos + d2);
                             new_dir2 = Some(-v2.pos.normalize().map(|x| if x.is_nan() {0.0} else {x}));
