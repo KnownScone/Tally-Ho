@@ -5,7 +5,7 @@ use comp::collider::*;
 
 use std::f32;
 
-use cgmath::{InnerSpace, Vector2, Vector3, Zero};
+use cgmath::{InnerSpace, ApproxEq, Vector2, Vector3, Zero};
 use specs;
 
 pub struct CollisionSystem {
@@ -68,9 +68,8 @@ impl<'a> specs::System<'a> for CollisionSystem {
 
         // Move the collider with its recently modified transform.
         for (ent, tran, mut coll, _) in (&*ent, &tran, &mut coll, &self.mod_transform).join() {
-            let vel = tran.pos - tran.last_pos;
-
             let bound = if coll.sweep {
+
                 let old_bound = coll.shape.bound(tran.last_pos);
                 let new_bound = coll.shape.bound(tran.pos);
 
@@ -97,16 +96,21 @@ impl<'a> specs::System<'a> for CollisionSystem {
         }
 
         self.broad_phase.for_each(|(e1, e2)| {
+            let c1 = coll.get(e1).unwrap();
+            let c2 = coll.get(e2).unwrap();
+
             let mut new_pos1 = None;
             let mut new_pos2 = None;
             let mut new_dir1 = None;
             let mut new_dir2 = None;
             
             {
-                let c1 = coll.get(e1).unwrap();
-                let c2 = coll.get(e2).unwrap();
                 let t1 = tran.get(e1).unwrap();
                 let t2 = tran.get(e2).unwrap();
+                let v1 = vel.get(e1).unwrap();
+                let v2 = vel.get(e2).unwrap();
+                let disp1 = t1.pos - t1.last_pos;
+                let disp2 = t2.pos - t2.last_pos;
 
                 match (&c1.shape, &c2.shape) {
                     // Discrete AABB-AABB collision.
@@ -124,12 +128,14 @@ impl<'a> specs::System<'a> for CollisionSystem {
 
                         let pen = penetration_vector(r1, r2);
 
-                        if pen != Vector3::zero() {
-                            new_pos1 = Some(t1.pos + pen / 2.0);
-                            new_pos2 = Some(t2.pos - pen / 2.0);
-                        } else {
-                            new_dir1 = Some(pen.normalize());
-                            new_dir2 = Some(-pen.normalize());
+                        if relative_ne!(pen, Vector3::zero()) {
+                            let d1 = pen / 2.0;
+                            let d2 = -pen / 2.0;
+                            new_pos1 = Some(t1.pos + d1);
+                            new_pos2 = Some(t2.pos + d2);
+
+                            new_dir1 = Some(d1.normalize().map(|x| if x.is_nan() {0.0} else {x}));
+                            new_dir2 = Some(d2.normalize().map(|x| if x.is_nan() {0.0} else {x}));
                         }
                     },
                     // Discrete AABB-Circle collision.
@@ -145,21 +151,18 @@ impl<'a> specs::System<'a> for CollisionSystem {
                     },
                     // Sweep AABB-AABB collision.
                     (&Shape::AABB(r1), &Shape::AABB(r2)) 
-                    if c1.sweep || c2.sweep => {
-                        let disp1 = t1.pos - t1.last_pos;
-                        let disp2 = t2.pos - t2.last_pos;
-
+                    if c1.sweep || c2.sweep => { 
                         if let Some((t_first, t_last)) = sweep_aabb(r1, t1.last_pos, disp1, r2, t2.last_pos, disp2) {
                             let d1 = disp1 * (t_first - f32::EPSILON);
                             
                             new_pos1 = Some(t1.last_pos + d1);
-                            new_dir1 = Some(-d1.normalize().map(|x| if x.is_nan() {0.0} else {x}));
+                            new_dir1 = Some(-v1.pos.normalize().map(|x| if x.is_nan() {0.0} else {x}));
                         }
                         if let Some((t_first, t_last)) = sweep_aabb(r2, t2.last_pos, disp2, r1, t1.last_pos, disp1) {
                             let d2 = disp2 * (t_first - f32::EPSILON);
                             
                             new_pos2 = Some(t2.last_pos + d2);
-                            new_dir2 = Some(-d2.normalize().map(|x| if x.is_nan() {0.0} else {x}));
+                            new_dir2 = Some(-v2.pos.normalize().map(|x| if x.is_nan() {0.0} else {x}));
                         }
                     },
                     // Sweep AABB-Circle collision.
