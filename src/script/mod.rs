@@ -10,17 +10,15 @@ use specs;
 use rlua::{Lua, Table, Value as LuaValue, Result as LuaResult, Error as LuaError};
 
 // A 'CompCtor' simply parses a component from lua and adds it onto an EntityBuilder
-type CompCtor = for<'a> Fn(LuaValue, specs::EntityBuilder<'a>) -> specs::EntityBuilder<'a>;
+type CompCtor = for<'a> Fn(LuaValue, &Lua, specs::EntityBuilder<'a>) -> specs::EntityBuilder<'a>;
 
 pub struct Script {
-    lua: Lua,
     comp_ctor: HashMap<String, Arc<CompCtor>>
 }
 
 impl Script {
     pub fn new() -> Script {
         Script {
-            lua: Lua::new(),
             comp_ctor: HashMap::new()
         }
     }
@@ -29,16 +27,16 @@ impl Script {
         self.comp_ctor.insert(
             String::from(alias), 
             Arc::new(
-                |v: LuaValue, eb: specs::EntityBuilder|
+                |v: LuaValue, lua: &Lua, eb: specs::EntityBuilder|
                     eb.with(
-                        T::parse(v)
+                        T::parse(v, lua)
                             .expect("Couldn't parse component")
                     )
             )
         );
     }
 
-    pub fn load_file(&mut self, path: &str) {
+    pub fn load_file(&self, lua: &Lua, path: &str) {
         let mut file = File::open(path)
             .expect("File was not found");
         
@@ -46,12 +44,12 @@ impl Script {
         file.read_to_string(&mut contents)
             .expect("Couldn't read the file");
         
-        self.lua.exec::<()>(&contents, Some(path))
+        lua.exec::<()>(&contents, Some(path))
             .expect("Script failed to execute");
     }
 
-    pub fn parse_entity(&self, name: &str, mut eb: specs::EntityBuilder) -> LuaResult<specs::Entity> {
-        let globals = self.lua.globals();
+    pub fn parse_entity(&self, lua: &Lua, name: &str, mut eb: specs::EntityBuilder) -> LuaResult<specs::Entity> {
+        let globals = lua.globals();
 
         let ent_table: Table = globals.get(name.clone())
             .map_err(|x| LuaError::SyntaxError {
@@ -69,7 +67,7 @@ impl Script {
                     incomplete_input: false,
                 })?;
 
-            eb = ctor(comp_data, eb);
+            eb = ctor(comp_data, lua, eb);
         }
 
         Ok(eb.build())

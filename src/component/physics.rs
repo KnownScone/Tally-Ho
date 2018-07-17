@@ -1,6 +1,6 @@
 use ::script::ComponentParser;
 
-use rlua::{Value as LuaValue, Result as LuaResult, Error as LuaError};
+use rlua::{Value as LuaValue, Result as LuaResult, Error as LuaError, Lua};
 use cgmath::Vector3;
 use specs;
 
@@ -14,7 +14,7 @@ impl specs::Component for Velocity {
 }
 
 impl ComponentParser for Velocity { 
-    fn parse(v: LuaValue) -> LuaResult<Self> {
+    fn parse(v: LuaValue, _: &Lua) -> LuaResult<Self> {
         match v {
             LuaValue::Table(t) =>
                 Ok(Velocity {

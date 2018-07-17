@@ -4,7 +4,7 @@ use ::Vertex;
 
 use std::sync::Arc;
 
-use rlua::{Table, Value as LuaValue, Result as LuaResult, Error as LuaError};
+use rlua::{Table, Value as LuaValue, Result as LuaResult, Error as LuaError, Lua};
 use cgmath::Vector2;
 use vulkano as vk;
 use specs;
@@ -41,7 +41,7 @@ impl specs::Component for Sprite {
 }
 
 impl ComponentParser for Sprite { 
-    fn parse(v: LuaValue) -> LuaResult<Self> {
+    fn parse(v: LuaValue, _: &Lua) -> LuaResult<Self> {
         match v {
             LuaValue::Table(t) => {
                 let bounds = {

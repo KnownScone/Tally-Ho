@@ -1,12 +1,16 @@
-use std::sync::Arc;
-
-use vulkano as vk;
-
 mod render;
 pub use self::render::{RenderId, SortedRender};
 
+use std::sync::{Mutex, Arc};
+
+use vulkano as vk;
+use rlua;
+
 #[derive(Default)]
 pub struct DeltaTime(pub f32);
+
+#[derive(Default)]
+pub struct Lua(pub Option<Arc<Mutex<rlua::Lua>>>);
 
 #[derive(Default)]
 pub struct ViewProjectionSet(pub Option<Arc<vk::descriptor::DescriptorSet + Send + Sync>>);

@@ -3,7 +3,7 @@ use ::script::ComponentParser;
 
 use std::ops::Range;
 
-use rlua::{Value as LuaValue, Result as LuaResult, Error as LuaError, Table};
+use rlua::{Value as LuaValue, Result as LuaResult, Error as LuaError, Function as LuaFunction, RegistryKey, Table, Lua};
 use cgmath::{Zero, Vector2, Vector3};
 use specs;
 
@@ -77,7 +77,7 @@ impl specs::Component for Collider {
 }
 
 impl ComponentParser for Collider { 
-    fn parse(v: LuaValue) -> LuaResult<Self> {
+    fn parse(v: LuaValue, lua: &Lua) -> LuaResult<Self> {
         match v {
             LuaValue::Table(t) => {
                 let shape_type: String = t.get("shape_type").expect("Couldn't get shape type");

@@ -5,7 +5,7 @@ use ::parse;
 
 use std::sync::Arc;
 
-use rlua::{Table, Value as LuaValue, Result as LuaResult, Error as LuaError};
+use rlua::{Table, Value as LuaValue, Result as LuaResult, Error as LuaError, Lua};
 use cgmath::{Point2, Point3, Vector2, Vector3};
 use vulkano as vk;
 use specs;
@@ -135,7 +135,7 @@ impl specs::Component for TileMap {
 }
 
 impl ComponentParser for TileMap { 
-    fn parse(v: LuaValue) -> LuaResult<Self> {
+    fn parse(v: LuaValue, _: &Lua) -> LuaResult<Self> {
         match v {
             LuaValue::Table(t) => {
                 // TODO: Load parse::TileMap from this, then call the component's load function w/ it.

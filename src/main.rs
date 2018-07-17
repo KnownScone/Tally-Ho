@@ -33,7 +33,7 @@ use resource as res;
 use component as comp;
 use system as sys;
 
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::cmp::{max, min};
 
 use vulkano as vk;
@@ -374,18 +374,6 @@ fn main() {
         .build();
 
     let mut game = game::Game::new(1.0/60.0, logic_disp, render_disp);
-
-    let mut script = script::Script::new();
-    script.register::<comp::Transform>("transform");
-    script.register::<comp::Sprite>("sprite");
-    script.register::<comp::Velocity>("velocity");
-    script.register::<comp::TileMap>("tile_map");
-    script.register::<comp::Collider>("collider");
-    script.load_file("assets/scripts/test.lua");
-
-    let _e = script.parse_entity("stuff", game.world.create_entity()).unwrap();
-    let _e = script.parse_entity("stuff2", game.world.create_entity()).unwrap();
-    // let e = script.parse_entity("stuff_map", game.world.create_entity()).unwrap();
     
     let mut tile_map = comp::TileMap::new(
         cgmath::Vector3::new(0.1, 0.1, 0.1),
@@ -407,12 +395,31 @@ fn main() {
     //     })
     // .build(); 
 
+    // TODO: We need to find some way to occasionally call "expire_registry_values" on lua.
+    game.world.add_resource(res::Lua(Some(Arc::new(Mutex::new(rlua::Lua::new())))));
     game.world.add_resource(res::TextureSet(Some(tex_set)));   
     game.world.add_resource(res::ViewProjectionSet(Some(view_proj_set.clone())));   
     game.world.add_resource(res::Device(Some(device.clone())));   
     game.world.add_resource(res::Queue(Some(queue.clone())));    
     game.world.add_resource(res::Framebuffer(None));    
     game.world.add_resource(res::DynamicState(None));
+
+    let mut script = script::Script::new();
+    script.register::<comp::Transform>("transform");
+    script.register::<comp::Sprite>("sprite");
+    script.register::<comp::Velocity>("velocity");
+    script.register::<comp::TileMap>("tile_map");
+    script.register::<comp::Collider>("collider");
+    
+    {
+        let mutex = game.world.read_resource::<res::Lua>().0.as_ref().unwrap().clone();
+        let lua = mutex.lock().unwrap();
+        script.load_file(&lua, "assets/scripts/test.lua");
+
+        let _e = script.parse_entity(&lua, "stuff", game.world.create_entity()).unwrap();
+        let _e = script.parse_entity(&lua, "stuff2", game.world.create_entity()).unwrap();
+        // let e = script.parse_entity("stuff_map", game.world.create_entity()).unwrap();
+    }
 
     // Accumulates previous frames' futures until the GPU is done executing them.
     // * Submitting a command produces a future, which holds required resources for as long as they are in use by the GPU.
