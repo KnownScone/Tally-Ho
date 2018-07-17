@@ -1,12 +1,14 @@
 use ::utility::{Rect2, Rect3, penetration_vector, sweep_aabb};
 use ::collision as coll;
 use ::component as comp;
+use ::resource as res;
 use comp::collider::*;
 
 use std::f32;
 
 use cgmath::{InnerSpace, ApproxEq, Vector2, Vector3, Zero};
 use specs;
+use rlua::{Function as LuaFunction, UserData, UserDataMethods};
 
 pub struct CollisionSystem {
     transform_ins_read: Option<specs::ReaderId<specs::InsertedFlag>>,
@@ -35,9 +37,10 @@ impl<'a> specs::System<'a> for CollisionSystem {
         specs::WriteStorage<'a, comp::Transform>, 
         specs::WriteStorage<'a, comp::Velocity>, 
         specs::WriteStorage<'a, comp::Collider>,
+        specs::Read<'a, res::Lua>,
     );
 
-    fn run(&mut self, (ent, mut tran, mut vel, mut coll): Self::SystemData) {
+    fn run(&mut self, (ent, mut tran, mut vel, mut coll, lua): Self::SystemData) {
         /* NOTE:
             Entities with collider components won't participate in 
             collision until it has a transform component.
@@ -95,6 +98,7 @@ impl<'a> specs::System<'a> for CollisionSystem {
             self.broad_phase.update(coll.index.unwrap(), bound);
         }
 
+        let lua = lua.0.as_ref().map(|x| x.lock().unwrap());
         self.broad_phase.for_each(|(e1, e2)| {
             let c1 = coll.get(e1).unwrap();
             let c2 = coll.get(e2).unwrap();
@@ -103,6 +107,7 @@ impl<'a> specs::System<'a> for CollisionSystem {
             let mut new_pos2 = None;
             let mut new_dir1 = None;
             let mut new_dir2 = None;
+            let mut collision = false;
             
             {
                 let t1 = tran.get(e1).unwrap();
@@ -136,6 +141,8 @@ impl<'a> specs::System<'a> for CollisionSystem {
 
                             new_dir1 = Some(d1.normalize().map(|x| if x.is_nan() {0.0} else {x}));
                             new_dir2 = Some(d2.normalize().map(|x| if x.is_nan() {0.0} else {x}));
+
+                            collision = true;
                         }
                     },
                     // Discrete AABB-Circle collision.
@@ -157,12 +164,14 @@ impl<'a> specs::System<'a> for CollisionSystem {
                             
                             new_pos1 = Some(t1.last_pos + d1);
                             new_dir1 = Some(-v1.pos.normalize().map(|x| if x.is_nan() {0.0} else {x}));
+                            collision = true;
                         }
                         if let Some((t_first, t_last)) = sweep_aabb(r2, t2.last_pos, disp2, r1, t1.last_pos, disp1) {
                             let d2 = (disp2 * t_first).map(|x| x - x.signum() * f32::EPSILON);
                             
                             new_pos2 = Some(t2.last_pos + d2);
                             new_dir2 = Some(-v2.pos.normalize().map(|x| if x.is_nan() {0.0} else {x}));
+                            collision = true;
                         }
                     },
                     // Sweep AABB-Circle collision.
@@ -196,6 +205,18 @@ impl<'a> specs::System<'a> for CollisionSystem {
                 let v = vel.get_mut(e2).unwrap();
                 v.pos = dir * v.pos.magnitude();
             }
+
+            if collision { if let Some(ref lua) = lua {
+                // TODO: Pass in entities as arguments to the callbacks.
+                if let Some(ref cb_key) = c1.on_collide {
+                    let cb: LuaFunction = lua.registry_value(cb_key).unwrap();
+                    cb.call::<_, ()>((LuaEntity::new(e1), LuaEntity::new(e2))).unwrap();
+                }
+                if let Some(ref cb_key) = c2.on_collide {
+                    let cb: LuaFunction = lua.registry_value(cb_key).unwrap();
+                    cb.call::<_, ()>((LuaEntity::new(e2), LuaEntity::new(e1))).unwrap();
+                }
+            }}
         });
     }
 
@@ -206,5 +227,25 @@ impl<'a> specs::System<'a> for CollisionSystem {
         let mut tran_storage: specs::WriteStorage<comp::Transform> = SystemData::fetch(&res);
         self.transform_ins_read = Some(tran_storage.track_inserted());        
         self.transform_mod_read = Some(tran_storage.track_modified());        
+    }
+}
+
+struct LuaEntity {
+    entity: specs::Entity,
+}
+
+impl LuaEntity {
+    pub fn new(entity: specs::Entity) -> Self {
+        LuaEntity {
+            entity
+        }
+    }
+}
+
+impl UserData for LuaEntity {
+    fn add_methods(methods: &mut UserDataMethods<Self>) {
+        methods.add_method("id", |_, this, _: ()| {
+            Ok(this.entity.id())
+        });
     }
 }

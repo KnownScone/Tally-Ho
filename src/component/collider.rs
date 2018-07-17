@@ -2,6 +2,8 @@ use ::utility::{Rect2, Rect3};
 use ::script::ComponentParser;
 
 use std::ops::Range;
+use std::sync::Arc;
+use std::fmt;
 
 use rlua::{Value as LuaValue, Result as LuaResult, Error as LuaError, Function as LuaFunction, RegistryKey, Table, Lua};
 use cgmath::{Zero, Vector2, Vector3};
@@ -52,21 +54,23 @@ impl Shape {
     }
 }
 
-#[derive(Debug)]
 pub struct Collider {
     pub shape: Shape,
 
     pub sweep: bool,
+
+    pub on_collide: Option<RegistryKey>,
     
     // Broad phase index.
     pub index: Option<usize>,
 }
 
 impl Collider {
-    pub fn new(shape: Shape, sweep: bool) -> Collider {
+    pub fn new(shape: Shape, sweep: bool, on_collide: Option<RegistryKey>) -> Collider {
         Collider {
             shape,
             sweep,
+            on_collide,
             index: None,
         }
     }
@@ -121,9 +125,16 @@ impl ComponentParser for Collider {
                     _ => panic!("Type is not a valid shape")
                 };
 
+
+                let key = {
+                    let func: Option<LuaFunction> = t.get("on_collide").ok();
+                    func.map(|x| lua.create_registry_value(x).unwrap())
+                };
+
                 Ok(Collider::new(
                     shape,
                     t.get("sweep").expect("Couldn't get sweep"),
+                    key
                 ))
             },
             LuaValue::Error(err) => Err(err),
@@ -133,6 +144,12 @@ impl ComponentParser for Collider {
                 message: None, 
             }),
         }
+    }
+}
+
+impl fmt::Debug for Collider {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result { 
+        write!(f, "Collider: shape: {:?}, sweep: {}, index: {:?}", self.shape, self.sweep, self.index) 
     }
 }
 
