@@ -1,6 +1,6 @@
-use ::script::ComponentParser;
+use ::script::{ScriptResult, ScriptError, ComponentParser};
 
-use rlua::{Table, Value as LuaValue, Result as LuaResult, Error as LuaError, Lua};
+use rlua::{Table, Value as LuaValue, Result as LuaResult, Error as LuaError, UserData, UserDataMethods, Lua};
 use cgmath::{Vector3};
 use specs;
 
@@ -24,26 +24,26 @@ impl specs::Component for Transform {
 }
 
 impl ComponentParser for Transform { 
-    fn parse(v: LuaValue, _: &Lua) -> LuaResult<Self> {
+    fn parse(v: LuaValue, _: &Lua) -> ScriptResult<Self> {
         match v {
             LuaValue::Table(t) => {
                 let pos = {
-                    let t: Table = t.get("position").expect("Couldn't get position");
+                    let t: Table = t.get("position")?;
                     Vector3::new(
-                        t.get("x").expect("Couldn't get x"), 
-                        t.get("y").expect("Couldn't get y"), 
-                        t.get("z").expect("Couldn't get z")
+                        t.get("x")?, 
+                        t.get("y")?, 
+                        t.get("z")?
                     )
                 };
 
                 Ok(Transform::new(pos))
             },
-            LuaValue::Error(err) => Err(err),
-            _ => Err(LuaError::FromLuaConversionError {
+            LuaValue::Error(err) => Err(ScriptError::LuaError(err)),
+            _ => Err(ScriptError::LuaError(LuaError::FromLuaConversionError {
                 from: "_",
                 to: "table",
                 message: None, 
-            }),
+            })),
         }
     }
 }

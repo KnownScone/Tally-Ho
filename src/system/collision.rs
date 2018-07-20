@@ -2,6 +2,7 @@ use ::utility::{Rect2, Rect3, penetration_vector, sweep_aabb};
 use ::collision as coll;
 use ::component as comp;
 use ::resource as res;
+use ::script::LuaEntity;
 use comp::collider::*;
 
 use std::f32;
@@ -210,11 +211,11 @@ impl<'a> specs::System<'a> for CollisionSystem {
                 // TODO: Pass in entities as arguments to the callbacks.
                 if let Some(ref cb_key) = c1.on_collide {
                     let cb: LuaFunction = lua.registry_value(cb_key).unwrap();
-                    cb.call::<_, ()>((LuaEntity::new(e1), LuaEntity::new(e2))).unwrap();
+                    cb.call::<_, ()>((LuaEntity(e1), LuaEntity(e2))).unwrap();
                 }
                 if let Some(ref cb_key) = c2.on_collide {
                     let cb: LuaFunction = lua.registry_value(cb_key).unwrap();
-                    cb.call::<_, ()>((LuaEntity::new(e2), LuaEntity::new(e1))).unwrap();
+                    cb.call::<_, ()>((LuaEntity(e2), LuaEntity(e1))).unwrap();
                 }
             }}
         });
@@ -227,25 +228,5 @@ impl<'a> specs::System<'a> for CollisionSystem {
         let mut tran_storage: specs::WriteStorage<comp::Transform> = SystemData::fetch(&res);
         self.transform_ins_read = Some(tran_storage.track_inserted());        
         self.transform_mod_read = Some(tran_storage.track_modified());        
-    }
-}
-
-struct LuaEntity {
-    entity: specs::Entity,
-}
-
-impl LuaEntity {
-    pub fn new(entity: specs::Entity) -> Self {
-        LuaEntity {
-            entity
-        }
-    }
-}
-
-impl UserData for LuaEntity {
-    fn add_methods(methods: &mut UserDataMethods<Self>) {
-        methods.add_method("id", |_, this, _: ()| {
-            Ok(this.entity.id())
-        });
     }
 }

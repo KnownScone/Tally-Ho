@@ -1,11 +1,11 @@
 use ::Vertex;
 use ::utility::Rect2;
-use ::script::ComponentParser;
+use ::script::{ScriptResult, ScriptError, ComponentParser};
 use ::parse;
 
 use std::sync::Arc;
 
-use rlua::{Table, Value as LuaValue, Result as LuaResult, Error as LuaError, Lua};
+use rlua::{Table, Value as LuaValue, Result as LuaResult, Error as LuaError, UserData, UserDataMethods, Lua};
 use cgmath::{Point2, Point3, Vector2, Vector3};
 use vulkano as vk;
 use specs;
@@ -135,41 +135,41 @@ impl specs::Component for TileMap {
 }
 
 impl ComponentParser for TileMap { 
-    fn parse(v: LuaValue, _: &Lua) -> LuaResult<Self> {
+    fn parse(v: LuaValue, _: &Lua) -> ScriptResult<Self> {
         match v {
             LuaValue::Table(t) => {
                 // TODO: Load parse::TileMap from this, then call the component's load function w/ it.
-                let path: String = t.get("path").expect("Couldn't get path");
+                let path: String = t.get("path")?;
 
                 let tile_dims = {
-                    let t: Table = t.get("tile_dimensions").expect("Couldn't get tile dimensions");
+                    let t: Table = t.get("tile_dimensions")?;
                     Vector3::new(
-                        t.get("x").expect("Couldn't get x"), 
-                        t.get("y").expect("Couldn't get y"), 
-                        t.get("z").expect("Couldn't get z")
+                        t.get("x")?, 
+                        t.get("y")?, 
+                        t.get("z")?
                     )
                 };
 
                 let tex_dims = {
-                    let t: Table = t.get("texture_dimensions").expect("Couldn't get texture dimensions");
+                    let t: Table = t.get("texture_dimensions")?;
                     Vector2::new(
-                        t.get("x").expect("Couldn't get x"), 
-                        t.get("y").expect("Couldn't get y"), 
+                        t.get("x")?, 
+                        t.get("y")?, 
                     )
                 };
 
                 Ok(TileMap::new(
                     tile_dims,
                     tex_dims,
-                    t.get("image_index").expect("Couldn't get image index")
+                    t.get("image_index")?
                 ))
             },
-            LuaValue::Error(err) => Err(err),
-            _ => Err(LuaError::FromLuaConversionError {
+            LuaValue::Error(err) => Err(ScriptError::LuaError(err)),
+            _ => Err(ScriptError::LuaError(LuaError::FromLuaConversionError {
                 from: "_",
                 to: "table",
                 message: None, 
-            }),
+            })),
         }
     }
 }

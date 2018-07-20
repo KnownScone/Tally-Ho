@@ -1,6 +1,6 @@
-use ::script::ComponentParser;
+use ::script::{ScriptResult, ScriptError, ComponentParser};
 
-use rlua::{Value as LuaValue, Result as LuaResult, Error as LuaError, Lua};
+use rlua::{Value as LuaValue, Result as LuaResult, Error as LuaError, UserData, UserDataMethods, Lua};
 use cgmath::Vector3;
 use specs;
 
@@ -14,22 +14,22 @@ impl specs::Component for Velocity {
 }
 
 impl ComponentParser for Velocity { 
-    fn parse(v: LuaValue, _: &Lua) -> LuaResult<Self> {
+    fn parse(v: LuaValue, _: &Lua) -> ScriptResult<Self> {
         match v {
             LuaValue::Table(t) =>
                 Ok(Velocity {
                     pos: Vector3::new(
-                        t.get("x").expect("Couldn't get x"), 
-                        t.get("y").expect("Couldn't get y"), 
-                        t.get("z").expect("Couldn't get z")
+                        t.get("x")?, 
+                        t.get("y")?, 
+                        t.get("z")?
                     ),
                 }),
-            LuaValue::Error(err) => Err(err),
-            _ => Err(LuaError::FromLuaConversionError {
+            LuaValue::Error(err) => Err(ScriptError::LuaError(err)),
+            _ => Err(ScriptError::LuaError(LuaError::FromLuaConversionError {
                 from: "_",
                 to: "table",
                 message: None, 
-            }),
+            })),
         }
     }
 }

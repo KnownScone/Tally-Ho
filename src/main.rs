@@ -25,6 +25,7 @@ mod resource;
 mod component;
 mod utility;
 mod system;
+#[macro_use]
 mod script;
 mod parse;
 mod game;
@@ -35,6 +36,8 @@ use system as sys;
 
 use std::sync::{Arc, Mutex};
 use std::cmp::{max, min};
+use std::fs::File;
+use std::io::prelude::*;
 
 use vulkano as vk;
 use vk::instance::{Instance, PhysicalDevice};
@@ -404,17 +407,20 @@ fn main() {
     game.world.add_resource(res::Framebuffer(None));    
     game.world.add_resource(res::DynamicState(None));
 
-    let mut script = script::Script::new();
-    script.register::<comp::Transform>("transform");
-    script.register::<comp::Sprite>("sprite");
-    script.register::<comp::Velocity>("velocity");
-    script.register::<comp::TileMap>("tile_map");
-    script.register::<comp::Collider>("collider");
-    
+    let script = script::Script;
+
     {
         let mutex = game.world.read_resource::<res::Lua>().0.as_ref().unwrap().clone();
         let lua = mutex.lock().unwrap();
-        script.load_file(&lua, "assets/scripts/test.lua");
+        let mut file = File::open("assets/scripts/test.lua")
+            .expect("File was not found");
+        
+        let mut contents = String::new();
+        file.read_to_string(&mut contents)
+            .expect("Couldn't read the file");
+        
+        lua.exec::<()>(&contents, None)
+            .expect("Script failed to execute");
 
         let _e = script.parse_entity(&lua, "stuff", game.world.create_entity()).unwrap();
         let _e = script.parse_entity(&lua, "stuff2", game.world.create_entity()).unwrap();

@@ -1,10 +1,10 @@
-use ::script::ComponentParser;
+use ::script::{ScriptResult, ScriptError, ComponentParser};
 use ::utility::Rect2;
 use ::Vertex;
 
 use std::sync::Arc;
 
-use rlua::{Table, Value as LuaValue, Result as LuaResult, Error as LuaError, Lua};
+use rlua::{Table, Value as LuaValue, Result as LuaResult, Error as LuaError, UserData, UserDataMethods, Lua};
 use cgmath::Vector2;
 use vulkano as vk;
 use specs;
@@ -41,33 +41,33 @@ impl specs::Component for Sprite {
 }
 
 impl ComponentParser for Sprite { 
-    fn parse(v: LuaValue, _: &Lua) -> LuaResult<Self> {
+    fn parse(v: LuaValue, _: &Lua) -> ScriptResult<Self> {
         match v {
             LuaValue::Table(t) => {
                 let bounds = {
-                    let t: Table = t.get("bounds").expect("Couldn't get bounds");
+                    let t: Table = t.get("bounds")?;
                     Rect2::new(
                         Vector2::new(
-                            t.get("min_x").expect("Couldn't get min x"), 
-                            t.get("min_y").expect("Couldn't get min y"), 
+                            t.get("min_x")?, 
+                            t.get("min_y")?, 
                         ),
                         Vector2::new(
-                            t.get("max_x").expect("Couldn't get max x"), 
-                            t.get("max_y").expect("Couldn't get max y"), 
+                            t.get("max_x")?, 
+                            t.get("max_y")?, 
                         )
                     )
                 };
 
                 let uv = {
-                    let t: Table = t.get("uv").expect("Couldn't get bounds");
+                    let t: Table = t.get("uv")?;
                     Rect2::new(
                         Vector2::new(
-                            t.get("min_x").expect("Couldn't get min x"), 
-                            t.get("min_y").expect("Couldn't get min y"), 
+                            t.get("min_x")?, 
+                            t.get("min_y")?, 
                         ),
                         Vector2::new(
-                            t.get("max_x").expect("Couldn't get max x"), 
-                            t.get("max_y").expect("Couldn't get max y"), 
+                            t.get("max_x")?, 
+                            t.get("max_y")?, 
                         )
                     )
                 };
@@ -75,15 +75,15 @@ impl ComponentParser for Sprite {
                 Ok(Sprite::new(
                     bounds,
                     uv,
-                    t.get("image_index").expect("Couldn't get image index")
+                    t.get("image_index")?
                 ))
             },
-            LuaValue::Error(err) => Err(err),
-            _ => Err(LuaError::FromLuaConversionError {
+            LuaValue::Error(err) => Err(ScriptError::LuaError(err)),
+            _ => Err(ScriptError::LuaError(LuaError::FromLuaConversionError {
                 from: "_",
                 to: "table",
                 message: None, 
-            }),
+            })),
         }
     }
 }

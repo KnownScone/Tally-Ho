@@ -1,11 +1,11 @@
 use ::utility::{Rect2, Rect3};
-use ::script::ComponentParser;
+use ::script::{ScriptResult, ScriptError, ComponentParser};
 
 use std::ops::Range;
 use std::sync::Arc;
 use std::fmt;
 
-use rlua::{Value as LuaValue, Result as LuaResult, Error as LuaError, Function as LuaFunction, RegistryKey, Table, Lua};
+use rlua::{Value as LuaValue, Result as LuaResult, Error as LuaError, Function as LuaFunction, UserData, UserDataMethods, RegistryKey, Table, Lua};
 use cgmath::{Zero, Vector2, Vector3};
 use specs;
 
@@ -81,45 +81,45 @@ impl specs::Component for Collider {
 }
 
 impl ComponentParser for Collider { 
-    fn parse(v: LuaValue, lua: &Lua) -> LuaResult<Self> {
+    fn parse(v: LuaValue, lua: &Lua) -> ScriptResult<Self> {
         match v {
             LuaValue::Table(t) => {
-                let shape_type: String = t.get("shape_type").expect("Couldn't get shape type");
+                let shape_type: String = t.get("shape_type")?;
 
                 let shape = match shape_type.as_ref() {
                     "aabb" => {
-                        let t: Table = t.get("shape").expect("Couldn't get shape");
+                        let t: Table = t.get("shape")?;
 
                         Shape::AABB(
                             Rect3::new(
                                 Vector3::new(
-                                    t.get("min_x").expect("Couldn't get min x"), 
-                                    t.get("min_y").expect("Couldn't get min y"), 
-                                    t.get("min_z").expect("Couldn't get min z"), 
+                                    t.get("min_x")?, 
+                                    t.get("min_y")?, 
+                                    t.get("min_z")?, 
                                 ),
                                 Vector3::new(
-                                    t.get("max_x").expect("Couldn't get max x"), 
-                                    t.get("max_y").expect("Couldn't get max y"), 
-                                    t.get("max_z").expect("Couldn't get max y"), 
+                                    t.get("max_x")?, 
+                                    t.get("max_y")?, 
+                                    t.get("max_z")?, 
                                 )
                             )
                         )
                     },
                     "circle" => {
-                        let t: Table = t.get("shape").expect("Couldn't get shape");
+                        let t: Table = t.get("shape")?;
 
                         Shape::Circle {
                             offset: {
-                                let t: Table = t.get("offset").expect("Couldn't get offset");
+                                let t: Table = t.get("offset")?;
                                 Vector2::new(
-                                    t.get("x").expect("Couldn't get x"),
-                                    t.get("y").expect("Couldn't get y"),
+                                    t.get("x")?,
+                                    t.get("y")?,
                                 )
                             },
-                            radius: t.get("radius").expect("Couldn't get radius"),
+                            radius: t.get("radius")?,
                             depth:
-                                t.get("min_z").expect("Couldn't get min z")
-                                .. t.get("max_z").expect("Couldn't get max z"),
+                                t.get("min_z")?
+                                .. t.get("max_z")?
                         }
                     },
                     _ => panic!("Type is not a valid shape")
@@ -133,16 +133,16 @@ impl ComponentParser for Collider {
 
                 Ok(Collider::new(
                     shape,
-                    t.get("sweep").expect("Couldn't get sweep"),
+                    t.get("sweep")?,
                     key
                 ))
             },
-            LuaValue::Error(err) => Err(err),
-            _ => Err(LuaError::FromLuaConversionError {
+            LuaValue::Error(err) => Err(ScriptError::LuaError(err)),
+            _ => Err(ScriptError::LuaError(LuaError::FromLuaConversionError {
                 from: "_",
                 to: "table",
                 message: None, 
-            }),
+            })),
         }
     }
 }

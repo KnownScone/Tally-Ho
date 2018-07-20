@@ -1,75 +1,77 @@
 mod parse;
 pub use self::parse::ComponentParser;
 
-use std::collections::HashMap;
-use std::fs::File;
-use std::io::prelude::*;
-use std::sync::Arc;
+use ::comp;
+
+use std::sync::{Arc, Mutex};
 
 use specs;
-use rlua::{Lua, Table, Value as LuaValue, Result as LuaResult, Error as LuaError};
+use cgmath::Vector3;
+use rlua::{Lua, Table, Value as LuaValue, Result as LuaResult, Error as LuaError, String as LuaString, UserData, UserDataMethods};
 
-// A 'CompCtor' simply parses a component from lua and adds it onto an EntityBuilder
-type CompCtor = for<'a> Fn(LuaValue, &Lua, specs::EntityBuilder<'a>) -> specs::EntityBuilder<'a>;
-
-pub struct Script {
-    comp_ctor: HashMap<String, Arc<CompCtor>>
+#[derive(Debug)]
+pub enum ScriptError {
+    InvalidEntity(String),
+    InvalidComponent(String),
+    LuaError(LuaError),
 }
 
-impl Script {
-    pub fn new() -> Script {
-        Script {
-            comp_ctor: HashMap::new()
-        }
+impl From<LuaError> for ScriptError {
+    fn from(error: LuaError) -> Self {
+        ScriptError::LuaError(error)
     }
+} 
 
-    pub fn register<T: specs::Component + ComponentParser>(&mut self, alias: &str) {
-        self.comp_ctor.insert(
-            String::from(alias), 
-            Arc::new(
-                |v: LuaValue, lua: &Lua, eb: specs::EntityBuilder|
-                    eb.with(
-                        T::parse(v, lua)
-                            .expect("Couldn't parse component")
-                    )
-            )
-        );
-    }
+pub type ScriptResult<T> = Result<T, ScriptError>;
 
-    pub fn load_file(&self, lua: &Lua, path: &str) {
-        let mut file = File::open(path)
-            .expect("File was not found");
+macro_rules! script {
+    ($($comp_names:ident: $comp_types:ty = $lua_names:expr),*) => {
         
-        let mut contents = String::new();
-        file.read_to_string(&mut contents)
-            .expect("Couldn't read the file");
-        
-        lua.exec::<()>(&contents, Some(path))
-            .expect("Script failed to execute");
-    }
+        #[derive(Clone)]
+        pub struct LuaEntity(pub specs::Entity);
 
-    pub fn parse_entity(&self, lua: &Lua, name: &str, mut eb: specs::EntityBuilder) -> LuaResult<specs::Entity> {
-        let globals = lua.globals();
-
-        let ent_table: Table = globals.get(name.clone())
-            .map_err(|x| LuaError::SyntaxError {
-                message: format!("Entity with name \"{}\" does not exist", name),
-                incomplete_input: false,
-            })?;
-
-        // TODO: In the case that we have two components of the same type on the same entity, return an error
-        for comp_pair in ent_table.pairs::<String, _>() {
-            let (comp_alias, comp_data) = comp_pair?;
-
-            let ctor = self.comp_ctor.get(&comp_alias)
-                .ok_or(LuaError::SyntaxError {
-                    message: format!("{} is not a registered component", comp_alias),
-                    incomplete_input: false,
-                })?;
-
-            eb = ctor(comp_data, lua, eb);
+        impl UserData for LuaEntity {
+            fn add_methods(methods: &mut UserDataMethods<Self>) {
+                methods.add_method("id", |_, this, _: ()| {
+                    Ok(this.0.id())
+                });
+            }
         }
 
-        Ok(eb.build())
-    }
+        pub struct Script;
+
+        impl Script {
+            fn parse_component<'a>(&self, lua: &Lua, lua_name: &str, data: LuaValue, eb: specs::EntityBuilder<'a>) -> ScriptResult<specs::EntityBuilder<'a>> {
+                match lua_name {
+                    $($lua_names => {
+                        Ok(eb.with(
+                            <$comp_types as ComponentParser>::parse(data, lua)?
+                        ))
+                    }),*
+                    _ => Err(ScriptError::InvalidComponent(lua_name.into())),
+                }
+            }
+
+            pub fn parse_entity(&self, lua: &Lua, lua_name: &str, mut eb: specs::EntityBuilder) -> ScriptResult<specs::Entity> {
+                let globals = lua.globals();
+                let ent_table: Table = globals.get(lua_name.clone())
+                    .map_err(|x| ScriptError::InvalidEntity(lua_name.into()))?;
+
+                for comp_pair in ent_table.pairs::<String, _>() {
+                    let (comp_lua_name, comp_data) = comp_pair?;
+
+                    eb = self.parse_component(lua, &comp_lua_name, comp_data, eb)?;
+                }
+                Ok(eb.build())
+            }
+        }
+    };
 }
+
+script!(
+    Transform: comp::Transform = "transform",
+    Velocity: comp::Velocity = "velocity",
+    Collider: comp::Collider = "collider",
+    Sprite: comp::Sprite = "sprite",
+    TileMap: comp::TileMap = "tile_map"
+);
