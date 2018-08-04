@@ -1,13 +1,39 @@
 mod parse;
 pub use self::parse::ComponentParser;
 
-use ::comp;
+use ::resource as res;
+use ::component as comp;
 
 use std::sync::{Arc, Mutex};
+use std::collections::HashMap;
+use std::cell::{RefCell};
+use std::rc::Rc;
 
 use specs;
+use specs::Builder;
+use shred::{Accessor, AccessorCow, CastFrom, DispatcherBuilder, DynamicSystemData, MetaTable, Read, Resource,
+            ResourceId, Resources,
+            System, SystemData};
+use shred::cell::{Ref, RefMut};
 use cgmath::Vector3;
-use rlua::{Lua, Table, Value as LuaValue, Result as LuaResult, Error as LuaError, String as LuaString, UserData, UserDataMethods};
+use rlua::{Lua, Table, RegistryKey, Value as LuaValue, Result as LuaResult, Function as LuaFunction, Error as LuaError, String as LuaString,
+    UserData, UserDataMethods, AnyUserData, Scope as LuaScope};
+
+#[derive(Clone)]
+pub struct LuaEntity(pub specs::Entity);
+
+impl UserData for LuaEntity {
+    fn add_methods(methods: &mut UserDataMethods<Self>) {
+        methods.add_method("id", |_, this, _: ()| {
+            Ok(this.0.id())
+        });
+    }
+}
+
+#[derive(Clone)]
+pub struct LuaWorld(pub *mut specs::World);
+
+unsafe impl Send for LuaWorld { }
 
 #[derive(Debug)]
 pub enum ScriptError {
@@ -25,16 +51,14 @@ impl From<LuaError> for ScriptError {
 pub type ScriptResult<T> = Result<T, ScriptError>;
 
 macro_rules! script {
-    ($($comp_names:ident: $comp_types:ty = $lua_names:expr),*) => {
-        
-        #[derive(Clone)]
-        pub struct LuaEntity(pub specs::Entity);
+    (components: [ $(($lua_names:expr) = $comp_names:ident: $comp_types:ty),* ],
+    functions: [ $(($func_names:expr) = $funcs:expr),* ]) => {
 
-        impl UserData for LuaEntity {
+        impl UserData for LuaWorld {
             fn add_methods(methods: &mut UserDataMethods<Self>) {
-                methods.add_method("id", |_, this, _: ()| {
-                    Ok(this.0.id())
-                });
+                $(
+                methods.add_method($func_names, $funcs);
+                )*
             }
         }
 
@@ -69,9 +93,29 @@ macro_rules! script {
 }
 
 script!(
-    Transform: comp::Transform = "transform",
-    Velocity: comp::Velocity = "velocity",
-    Collider: comp::Collider = "collider",
-    Sprite: comp::Sprite = "sprite",
-    TileMap: comp::TileMap = "tile_map"
+    components: [
+        ("transform") = Transform: comp::Transform,
+        ("velocity")  = Velocity: comp::Velocity,
+        ("collider")  = Collider: comp::Collider,
+        ("sprite")    = Sprite: comp::Sprite,
+        ("tile_map")  = TileMap: comp::TileMap
+    ],
+    functions: [
+        ("position") = |_, this: &LuaWorld, entity: LuaEntity| -> LuaResult<(f32, f32, f32)> {
+            unsafe {
+                let world = &*this.0;
+                let storage = world.read_storage::<comp::Transform>();
+                Ok(storage.get(entity.0).unwrap().pos.into())
+            }
+        },
+        ("move") = |_, this: &LuaWorld, (entity, x, y, z): (LuaEntity, f32, f32, f32)| {
+            unsafe {
+                let world = &*this.0;
+                let mut storage = world.write_storage::<comp::Transform>();
+                let comp = storage.get_mut(entity.0).unwrap();
+                comp.pos += Vector3::new(x, y, z);
+            }
+            Ok(())
+        }
+    ]
 );
