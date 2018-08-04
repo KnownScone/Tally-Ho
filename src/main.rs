@@ -13,6 +13,7 @@ extern crate dmsort;
 extern crate cgmath;
 extern crate image;
 extern crate specs;
+extern crate shred;
 extern crate rlua;
 #[macro_use]
 extern crate nom;

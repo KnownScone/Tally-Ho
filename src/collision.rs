@@ -20,8 +20,7 @@ pub struct BroadPhase {
     objects: Vec<Option<Object>>,
     free_idxs: VecDeque<usize>,
     cells: HashMap<Vector2<i32>, Cell>,
-
-    coll_pairs: HashSet<(usize, usize)>,
+    active_cells: HashSet<Vector2<i32>>,
 }
 
 impl BroadPhase {
@@ -30,7 +29,7 @@ impl BroadPhase {
             objects: Vec::new(),
             free_idxs: VecDeque::new(),
             cells: HashMap::new(),
-            coll_pairs: HashSet::new(),
+            active_cells: HashSet::new(),
         }
     }
 
@@ -55,7 +54,7 @@ impl BroadPhase {
                 self.cells.entry(pos).or_insert(Cell::new())
                     .objects.push(obj_idx);
 
-                self.update_collision_pairs(pos);
+                self.active_cells.insert(pos);
             }
         }
 
@@ -96,7 +95,7 @@ impl BroadPhase {
                 if cell_x >= old_grid_bound.min.x && cell_x < old_grid_bound.max.x 
                 && cell_y >= old_grid_bound.min.y && cell_y < old_grid_bound.max.y {
                     // but we do need to update collision first...
-                    self.update_collision_pairs(pos);
+                    self.active_cells.insert(pos);
                     continue;
                 }
 
@@ -104,7 +103,7 @@ impl BroadPhase {
                     .or_insert(Cell::new())
                         .objects.push(idx);
 
-                self.update_collision_pairs(pos);
+                self.active_cells.insert(pos);
             }
         }
     }
@@ -151,33 +150,35 @@ impl BroadPhase {
         )
     }
 
-    fn update_collision_pairs(&mut self, cell_pos: Vector2<i32>) {
-        if let Some(cell) = self.cells.get(&cell_pos) {
-            // Brute-force collision checking
-            for c_i in 0..cell.objects.len() {
-                for c_j in c_i+1..cell.objects.len() {
-                    let idx1 = cell.objects[c_i];
-                    let idx2 = cell.objects[c_j];
-                    let obj1 = self.objects[idx1].as_ref()
-                        .expect("Object should exist");
-                    let obj2 = self.objects[idx2].as_ref()
-                        .expect("Object should exist");
-
-                    let pair = (min(idx1, idx2), max(idx1, idx2)); 
-                    if obj1.bound.rect.is_intersecting(obj2.bound.rect) {
-                        self.coll_pairs.insert(pair);
-                    }
-                }
-            }
-        }
-    }
-
     pub fn for_each<F>(&mut self, func: F)
     where
         F: FnMut((specs::Entity, specs::Entity))
     {
+        let mut coll_pairs: HashSet<(usize, usize)> = HashSet::new();
+        
+        for cell_pos in self.active_cells.drain() {
+            if let Some(cell) = self.cells.get(&cell_pos) {
+                // Brute-force collision checking
+                for c_i in 0..cell.objects.len() {
+                    for c_j in c_i+1..cell.objects.len() {
+                        let idx1 = cell.objects[c_i];
+                        let idx2 = cell.objects[c_j];
+                        let obj1 = self.objects[idx1].as_ref()
+                            .expect("Object should exist");
+                        let obj2 = self.objects[idx2].as_ref()
+                            .expect("Object should exist");
+
+                        let pair = (min(idx1, idx2), max(idx1, idx2)); 
+                        if obj1.bound.rect.is_intersecting(obj2.bound.rect) {
+                            coll_pairs.insert(pair);
+                        }
+                    }
+                }
+            }
+        }
+
         let objects = &self.objects;
-        self.coll_pairs.drain()
+        coll_pairs.drain()
             .filter_map(|(i1, i2)| {
                 let e1 = objects[i1].as_ref().map(|x| x.entity);
                 let e2 = objects[i2].as_ref().map(|x| x.entity);
@@ -202,6 +203,8 @@ impl Cell {
         }
     }
 }
+
+use specs::Builder;
 
 #[test]
 fn collision_pairs() {
