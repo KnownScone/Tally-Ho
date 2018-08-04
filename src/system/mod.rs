@@ -12,3 +12,6 @@ pub use self::sprite::{SpriteSystem};
 
 mod collision;
 pub use self::collision::{CollisionSystem};
+
+mod transform;
+pub use self::transform::{TransformSystem};

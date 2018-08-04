@@ -19,9 +19,8 @@ impl<'a> specs::System<'a> for VelocitySystem {
         let dt = dt.0;
         
         for (mut tran, vel) in (&mut tran.restrict_mut(), &vel).join() {
-            if vel.pos != Vector3::zero() {
+            if relative_ne!(vel.pos, Vector3::zero()) {
                 let tran = tran.get_mut_unchecked();
-                tran.last_pos = tran.pos;
                 tran.pos += vel.pos * dt;
             }
         }
