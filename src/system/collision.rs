@@ -2,14 +2,16 @@ use ::utility::{Rect2, Rect3, penetration_vector, sweep_aabb};
 use ::collision as coll;
 use ::component as comp;
 use ::resource as res;
-use ::script::LuaEntity;
+use ::script::{LuaEntity, LuaWorld};
 use comp::collider::*;
 
 use std::f32;
+use std::rc::Rc;
+use std::cell::RefCell;
 
 use cgmath::{InnerSpace, ApproxEq, Vector2, Vector3, Zero};
 use specs;
-use rlua::{Function as LuaFunction, UserData, UserDataMethods};
+use rlua::{Function as LuaFunction, LightUserData, UserData, UserDataMethods, AnyUserData, Scope as LuaScope};
 
 pub struct CollisionSystem {
     transform_ins_read: Option<specs::ReaderId<specs::InsertedFlag>>,
@@ -38,10 +40,10 @@ impl<'a> specs::System<'a> for CollisionSystem {
         specs::WriteStorage<'a, comp::Transform>, 
         specs::WriteStorage<'a, comp::Velocity>, 
         specs::WriteStorage<'a, comp::Collider>,
-        specs::Read<'a, res::Lua>,
+        specs::Read<'a, specs::LazyUpdate>,
     );
 
-    fn run(&mut self, (ent, mut tran, mut vel, mut coll, lua): Self::SystemData) {
+    fn run(&mut self, (ent, mut tran, mut vel, mut coll, lazy): Self::SystemData) {
         /* NOTE:
             Entities with collider components won't participate in 
             collision until it has a transform component.
@@ -73,7 +75,6 @@ impl<'a> specs::System<'a> for CollisionSystem {
         // Move the collider with its recently modified transform.
         for (ent, tran, mut coll, _) in (&*ent, &tran, &mut coll, &self.mod_transform).join() {
             let bound = if coll.sweep {
-
                 let old_bound = coll.shape.bound(tran.last_pos);
                 let new_bound = coll.shape.bound(tran.pos);
 
@@ -99,7 +100,6 @@ impl<'a> specs::System<'a> for CollisionSystem {
             self.broad_phase.update(coll.index.unwrap(), bound);
         }
 
-        let lua = lua.0.as_ref().map(|x| x.lock().unwrap());
         self.broad_phase.for_each(|(e1, e2)| {
             let c1 = coll.get(e1).unwrap();
             let c2 = coll.get(e2).unwrap();
@@ -159,19 +159,19 @@ impl<'a> specs::System<'a> for CollisionSystem {
                     },
                     // Sweep AABB-AABB collision.
                     (&Shape::AABB(r1), &Shape::AABB(r2)) 
-                    if c1.sweep || c2.sweep => { 
+                    if c1.sweep || c2.sweep => {
                         if let Some((t_first, t_last)) = sweep_aabb(r1, t1.last_pos, disp1, r2, t2.last_pos, disp2) {
-                            let d1 = (disp1 * t_first).map(|x| x - x.signum() * f32::EPSILON);
-                            
+                            let d1 = (disp1 * t_first).map(|x| x - if relative_ne!(x, 0.0) {x.signum() * f32::EPSILON} else {0.0});
+                           
                             new_pos1 = Some(t1.last_pos + d1);
-                            new_dir1 = Some(-v1.pos.normalize().map(|x| if x.is_nan() {0.0} else {x}));
+                            new_dir1 = Some(-d1.normalize().map(|x| if x.is_nan() {0.0} else {x}));
                             collision = true;
                         }
                         if let Some((t_first, t_last)) = sweep_aabb(r2, t2.last_pos, disp2, r1, t1.last_pos, disp1) {
-                            let d2 = (disp2 * t_first).map(|x| x - x.signum() * f32::EPSILON);
-                            
+                            let d2 = (disp2 * t_first).map(|x| x - if relative_ne!(x, 0.0) {x.signum() * f32::EPSILON} else {0.0});
+
                             new_pos2 = Some(t2.last_pos + d2);
-                            new_dir2 = Some(-v2.pos.normalize().map(|x| if x.is_nan() {0.0} else {x}));
+                            new_dir2 = Some(-d2.normalize().map(|x| if x.is_nan() {0.0} else {x}));
                             collision = true;
                         }
                     },
@@ -193,7 +193,7 @@ impl<'a> specs::System<'a> for CollisionSystem {
             if let Some(pos) = new_pos1 {
                 let t = tran.get_mut(e1).unwrap();
                 t.pos = pos;
-            } 
+            }
             if let Some(dir) = new_dir1 {
                 let v = vel.get_mut(e1).unwrap();
                 v.pos = dir * v.pos.magnitude();
@@ -201,23 +201,40 @@ impl<'a> specs::System<'a> for CollisionSystem {
             if let Some(pos) = new_pos2 {
                 let t = tran.get_mut(e2).unwrap();
                 t.pos = pos;
-            } 
+            }
             if let Some(dir) = new_dir2 {
                 let v = vel.get_mut(e2).unwrap();
                 v.pos = dir * v.pos.magnitude();
             }
 
-            if collision { if let Some(ref lua) = lua {
-                // TODO: Pass in entities as arguments to the callbacks.
-                if let Some(ref cb_key) = c1.on_collide {
-                    let cb: LuaFunction = lua.registry_value(cb_key).unwrap();
-                    cb.call::<_, ()>((LuaEntity(e1), LuaEntity(e2))).unwrap();
-                }
-                if let Some(ref cb_key) = c2.on_collide {
-                    let cb: LuaFunction = lua.registry_value(cb_key).unwrap();
-                    cb.call::<_, ()>((LuaEntity(e2), LuaEntity(e1))).unwrap();
-                }
-            }}
+            if collision {
+                lazy.exec_mut(move |world| {
+                    unsafe {
+                        let world = world as *mut specs::World;
+                        if let Some(ref mutex) = (&*world).read_resource::<res::Lua>().0 {
+                            let lua = mutex.lock().unwrap();
+
+                            let coll = (&*world).read_storage::<comp::Collider>();
+
+                            let (cb1, cb2) = (
+                                coll.get(e1).unwrap()
+                                    .on_collide.as_ref(),
+                                coll.get(e2).unwrap()
+                                    .on_collide.as_ref(),
+                            );
+
+                            if cb1.is_some() || cb2.is_some() {
+                                if let Some(cb) = cb1.and_then(|x| lua.registry_value::<LuaFunction>(&x).ok()) {
+                                    cb.call::<_, ()>((LuaWorld(world), LuaEntity(e1), LuaEntity(e2))).unwrap();
+                                }
+                                if let Some(cb) = cb2.and_then(|x| lua.registry_value::<LuaFunction>(&x).ok()) {
+                                    cb.call::<_, ()>((LuaWorld(world), LuaEntity(e2), LuaEntity(e1))).unwrap();
+                                }
+                            }
+                        }
+                    }
+                });
+            }
         });
     }
 
