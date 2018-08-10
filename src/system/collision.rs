@@ -106,8 +106,8 @@ impl<'a> specs::System<'a> for CollisionSystem {
 
             let mut new_pos1 = None;
             let mut new_pos2 = None;
-            let mut new_dir1 = None;
-            let mut new_dir2 = None;
+            let mut new_vel1 = None;
+            let mut new_vel2 = None;
             let mut collision = false;
             
             {
@@ -139,9 +139,8 @@ impl<'a> specs::System<'a> for CollisionSystem {
                             let d2 = -pen / 2.0;
                             new_pos1 = Some(t1.pos + d1);
                             new_pos2 = Some(t2.pos + d2);
-
-                            new_dir1 = Some(d1.normalize().map(|x| if x.is_nan() {0.0} else {x}));
-                            new_dir2 = Some(d2.normalize().map(|x| if x.is_nan() {0.0} else {x}));
+                            
+                            // TODO: Set velocity?
 
                             collision = true;
                         }
@@ -160,18 +159,28 @@ impl<'a> specs::System<'a> for CollisionSystem {
                     // Sweep AABB-AABB collision.
                     (&Shape::AABB(r1), &Shape::AABB(r2)) 
                     if c1.sweep || c2.sweep => {
-                        if let Some((t_first, t_last)) = sweep_aabb(r1, t1.last_pos, disp1, r2, t2.last_pos, disp2) {
-                            let d1 = (disp1 * t_first).map(|x| x - if relative_ne!(x, 0.0) {x.signum() * f32::EPSILON} else {0.0});
-                           
+                        if let Some((t_first, t_last, norm)) = sweep_aabb(r1, t1.last_pos, disp1, r2, t2.last_pos, disp2) {
+                            let mut d1 = (disp1 * t_first).map(|x| x - if relative_ne!(x, 0.0) {x.signum() * f32::EPSILON} else {0.0});
+
+                            let time_left = 1.0 - t_first;
+                            let dot = (disp1.x * norm.y + disp1.y * norm.x) * time_left;
+                            let slide = Vector3::new(dot * norm.y, dot * norm.x, 0.0);
+
+                            d1 += slide;
+
                             new_pos1 = Some(t1.last_pos + d1);
-                            new_dir1 = Some(-d1.normalize().map(|x| if x.is_nan() {0.0} else {x}));
                             collision = true;
                         }
-                        if let Some((t_first, t_last)) = sweep_aabb(r2, t2.last_pos, disp2, r1, t1.last_pos, disp1) {
-                            let d2 = (disp2 * t_first).map(|x| x - if relative_ne!(x, 0.0) {x.signum() * f32::EPSILON} else {0.0});
+                        if let Some((t_first, t_last, norm)) = sweep_aabb(r2, t2.last_pos, disp2, r1, t1.last_pos, disp1) {
+                            let mut d2 = (disp2 * t_first).map(|x| x - if relative_ne!(x, 0.0) {x.signum() * f32::EPSILON} else {0.0});
+
+                            let time_left = 1.0 - t_first;
+                            let dot = (disp2.x * norm.y + disp2.y * norm.x) * time_left;
+                            let slide = Vector3::new(dot * norm.y, dot * norm.x, 0.0);
+
+                            d2 += slide;
 
                             new_pos2 = Some(t2.last_pos + d2);
-                            new_dir2 = Some(-d2.normalize().map(|x| if x.is_nan() {0.0} else {x}));
                             collision = true;
                         }
                     },
@@ -194,17 +203,17 @@ impl<'a> specs::System<'a> for CollisionSystem {
                 let t = tran.get_mut(e1).unwrap();
                 t.pos = pos;
             }
-            if let Some(dir) = new_dir1 {
+            if let Some(new_vel) = new_vel1 {
                 let v = vel.get_mut(e1).unwrap();
-                v.pos = dir * v.pos.magnitude();
+                v.pos = new_vel;
             }
             if let Some(pos) = new_pos2 {
                 let t = tran.get_mut(e2).unwrap();
                 t.pos = pos;
             }
-            if let Some(dir) = new_dir2 {
+            if let Some(new_vel) = new_vel2 {
                 let v = vel.get_mut(e2).unwrap();
-                v.pos = dir * v.pos.magnitude();
+                v.pos = new_vel;
             }
 
             if collision {

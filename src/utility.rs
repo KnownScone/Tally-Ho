@@ -121,7 +121,10 @@ pub fn penetration_vector(r1: Rect3<f32>, r2: Rect3<f32>) -> Vector3<f32> {
     closest_bounds_point_to_point(md, Vector3::zero())
 }
 
-pub fn sweep_aabb(aabb1: Rect3<f32>, pos1: Vector3<f32>, disp1: Vector3<f32>, aabb2: Rect3<f32>, pos2: Vector3<f32>, disp2: Vector3<f32>) -> Option<(f32, f32)> {
+pub fn sweep_aabb(
+    aabb1: Rect3<f32>, pos1: Vector3<f32>, disp1: Vector3<f32>, 
+    aabb2: Rect3<f32>, pos2: Vector3<f32>, disp2: Vector3<f32>
+) -> Option<(f32, f32, Vector3<f32>)> {
     let aabb1 = Rect3::new(
         pos1 + aabb1.min,
         pos1 + aabb1.max,
@@ -136,25 +139,56 @@ pub fn sweep_aabb(aabb1: Rect3<f32>, pos1: Vector3<f32>, disp1: Vector3<f32>, aa
     // Initialize times of first and last contact
     let mut t_first = 0.0;
     let mut t_last = 1.0;
+
+    let mut inv_entry = [0.0; 3];
+    let mut entry = [0.0; 3];
+    let mut axis = 0;
     
     // For each axis, determine times of first and last contact, if any
     for i in 0..3 {
         if v[i] < 0.0 {
+            inv_entry[i] = aabb1.max[i] - aabb2.min[i];
+            entry[i] = if relative_ne!(v[i], 0.0) {inv_entry[i] / v[i]} else {-f32::INFINITY};
+            let exit = aabb1.min[i] - aabb2.max[i];
+
+            if entry[i] > entry[axis] {
+                axis = i;
+            }
+
             if aabb2.max[i] < aabb1.min[i] { return None; } // Nonintersecting and moving apart
-            if aabb1.max[i] < aabb2.min[i] { t_first = ((aabb1.max[i] - aabb2.min[i]) / v[i]).max(t_first); }
-            if aabb2.max[i] > aabb1.min[i] { t_last  = ((aabb1.min[i] - aabb2.max[i]) / v[i]).min(t_last); }
+            if aabb1.max[i] < aabb2.min[i] { 
+                t_first = inv_entry[i].max(t_first); 
+            }
+            if aabb2.max[i] > aabb1.min[i] { 
+                t_last = if relative_ne!(v[i], 0.0) {exit / v[i]} else {f32::INFINITY}.min(t_first); 
+            }
         }
         if v[i] > 0.0 {
+            inv_entry[i] = aabb1.min[i] - aabb2.max[i];
+            entry[i] = if relative_ne!(v[i], 0.0) {inv_entry[i] / v[i]} else {f32::INFINITY};
+            let exit = aabb1.max[i] - aabb2.min[i];
+
+            if entry[i] > entry[axis] {
+                axis = i;
+            }
+
             if aabb2.min[i] > aabb1.max[i] { return None; } // Nonintersecting and moving apart
-            if aabb2.max[i] < aabb1.min[i] { t_first = ((aabb1.min[i] - aabb2.max[i]) / v[i]).max(t_first); }
-            if aabb1.max[i] > aabb2.min[i] { t_last = ((aabb1.max[i] - aabb2.min[i]) / v[i]).min(t_last); }
+            if aabb2.max[i] < aabb1.min[i] { 
+                t_first = inv_entry[i].max(t_first); 
+            }
+            if aabb1.max[i] > aabb2.min[i] { 
+                t_last = if relative_ne!(v[i], 0.0) {exit / v[i]} else {f32::INFINITY}.min(t_first); 
+            }
         }
 
         // No overlap possible if time of first contact occurs after time of last contact
-        if t_first > t_last { return None; };
+        if t_first > t_last { return None; }
     }
-    
-    Some((t_first, t_last))
+
+    let mut normal = Vector3::zero();
+    normal[axis] = entry[axis].signum();
+
+    Some((t_first, t_last, normal))
 }
 
 #[test]
