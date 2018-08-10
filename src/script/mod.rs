@@ -106,6 +106,7 @@ script!(
         ("collider")  = collider: comp::Collider,
         ("sprite")    = sprite: comp::Sprite,
         ("tile_map")  = tile_map: comp::TileMap,
+        ("script")    = script: comp::ScriptBehavior
     ],
     types: [
         types::Vector2f,

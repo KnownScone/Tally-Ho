@@ -1,15 +1,35 @@
 g = "hey"
 
 stuff = {
+  script = {
+    on_tick = function(world, this, dt)
+      local vel = vec3f(0.0, 0.0, 0.0)
+
+      if world:is_pressed(0) then
+        vel = vel + vec3f(0.0, -1.0, 0.0)
+      end
+      if world:is_pressed(1) then
+        vel = vel + vec3f(0.0, 1.0, 0.0)
+      end
+      if world:is_pressed(2) then
+        vel = vel + vec3f(-1.0, 0.0, 0.0)
+      end
+      if world:is_pressed(3) then
+        vel = vel + vec3f(1.0, 0.0, 0.0)
+      end
+      
+      world:set_velocity(this, vel:normalized())
+    end
+  },
   transform = {
     position = {
-      x = 0.1,
+      x = 0.5,
       y = 0.0,
       z = 0.0
     }
   },  
   velocity = {
-    x = -0.05,
+    x = -1.0,
     y = 0.05,
     z = 0.0
   },
@@ -24,8 +44,7 @@ stuff = {
       max_z = 0.1,
     },
     sweep = true,
-    on_collide = function(this, other)
-      print("HEY!")
+    on_collide = function(world, this, other)
     end
   },
   sprite = {
@@ -48,14 +67,14 @@ stuff = {
 stuff2 = {
   transform = {
     position = {
-      x = -0.2,
+      x = -0.5,
       y = 0.0,
       z = 0.0
     }
   }, 
   velocity = {
-    x = 0.05,
-    y = 0.05,
+    x = 0.0,
+    y = 0.0,
     z = 0.0
   },
   collider = {
@@ -64,12 +83,12 @@ stuff2 = {
       min_x = 0.0,
       min_y = 0.0,
       min_z = 0.0,
-      max_x = 0.1,
-      max_y = 0.1,
-      max_z = 0.1
+      max_x = 0.3,
+      max_y = 0.3,
+      max_z = 0.3
     },
     sweep = true,
-    on_collide = function(this, other)
+    on_collide = function(world, this, other)
       print(string.format("%s collided with %s", this:id(), other:id()))
     end
   },
@@ -77,8 +96,8 @@ stuff2 = {
     bounds = {
       min_x = 0.0,
       min_y = 0.0,
-      max_x = 0.1,
-      max_y = 0.1
+      max_x = 0.3,
+      max_y = 0.3
     },
     uv = {
       min_x = 0.0,

@@ -13,3 +13,4 @@ pub use self::sprite::{SpriteSystem};
 mod collision;
 pub use self::collision::{CollisionSystem};
 
+pub mod script;

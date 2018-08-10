@@ -12,3 +12,6 @@ pub use self::tilemap::{TileMap};
 
 pub mod collider;
 pub use self::collider::{Collider};
+
+pub mod script;
+pub use self::script::{ScriptBehavior};

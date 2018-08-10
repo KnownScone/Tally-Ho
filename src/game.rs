@@ -11,6 +11,7 @@ pub struct Game<'a> {
     dt: f32,
     logic_disp: specs::Dispatcher<'static, 'a>,
     render_disp: specs::Dispatcher<'static, 'a>,
+    on_tick: sys::script::OnTickEvent,
     
     accumumlator: f32,
     last_update: Option<Instant>,
@@ -32,6 +33,11 @@ impl<'a> Game<'a> {
             dt,
             logic_disp,
             render_disp,
+            on_tick: {
+                let mut on_tick = sys::script::OnTickEvent;
+                on_tick.setup(&mut world.res);
+                on_tick
+            },
             accumumlator: 0.0,
             last_update: None,
             world,
@@ -51,7 +57,7 @@ impl<'a> Game<'a> {
 
         self.accumumlator += frame_time * time_scale;
         while self.accumumlator >= self.dt {
-            use specs::RunNow;
+            self.on_tick.run_now(&self.world.res);
             self.logic_disp.dispatch(&mut self.world.res);
             self.world.exec(|mut tran: specs::WriteStorage<comp::Transform>| {
                 use specs::Join;
