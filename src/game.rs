@@ -1,15 +1,16 @@
+use component as comp;
 use resource as res;
 use system as sys;
 
 use std::time::{Instant};
 
+use specs::RunNow;
 use specs;
 
 pub struct Game<'a> {
     dt: f32,
     logic_disp: specs::Dispatcher<'static, 'a>,
     render_disp: specs::Dispatcher<'static, 'a>,
-    transform_sys: sys::TransformSystem,
     
     accumumlator: f32,
     last_update: Option<Instant>,
@@ -31,7 +32,6 @@ impl<'a> Game<'a> {
             dt,
             logic_disp,
             render_disp,
-            transform_sys: sys::TransformSystem,
             accumumlator: 0.0,
             last_update: None,
             world,
@@ -52,10 +52,18 @@ impl<'a> Game<'a> {
         self.accumumlator += frame_time * time_scale;
         while self.accumumlator >= self.dt {
             use specs::RunNow;
-
-            self.world.maintain();
             self.logic_disp.dispatch(&mut self.world.res);
-            self.transform_sys.run_now(&self.world.res);
+            self.world.exec(|mut tran: specs::WriteStorage<comp::Transform>| {
+                use specs::Join;
+
+                for mut tran in (&mut tran.restrict_mut()).join() {
+                    if relative_ne!(tran.get_unchecked().last_pos, tran.get_unchecked().pos) {
+                        let tran = tran.get_mut_unchecked();
+                        tran.last_pos = tran.pos;
+                    }
+                }
+            });
+            self.world.maintain();
 
             self.accumumlator -= self.dt;
         }
