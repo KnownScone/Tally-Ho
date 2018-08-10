@@ -143,16 +143,18 @@ pub fn sweep_aabb(
     let mut inv_entry = [0.0; 3];
     let mut entry = [0.0; 3];
     let mut axis = 0;
+    let mut dir = 0.0;
     
     // For each axis, determine times of first and last contact, if any
     for i in 0..3 {
         if v[i] < 0.0 {
             inv_entry[i] = aabb1.max[i] - aabb2.min[i];
-            entry[i] = if relative_ne!(v[i], 0.0) {inv_entry[i] / v[i]} else {-f32::INFINITY};
+            entry[i] = inv_entry[i] / v[i];
             let exit = aabb1.min[i] - aabb2.max[i];
 
-            if entry[i] > entry[axis] {
+            if entry[i] >= entry[axis] {
                 axis = i;
+                dir = -1.0;
             }
 
             if aabb2.max[i] < aabb1.min[i] { return None; } // Nonintersecting and moving apart
@@ -160,16 +162,17 @@ pub fn sweep_aabb(
                 t_first = entry[i].max(t_first); 
             }
             if aabb2.max[i] > aabb1.min[i] { 
-                t_last = if relative_ne!(v[i], 0.0) {exit / v[i]} else {f32::INFINITY}.min(t_first); 
+                t_last = (exit / v[i]).min(t_last); 
             }
         }
         if v[i] > 0.0 {
             inv_entry[i] = aabb1.min[i] - aabb2.max[i];
-            entry[i] = if relative_ne!(v[i], 0.0) {inv_entry[i] / v[i]} else {-f32::INFINITY};
+            entry[i] = inv_entry[i] / v[i];
             let exit = aabb1.max[i] - aabb2.min[i];
 
-            if entry[i] > entry[axis] {
+            if entry[i] >= entry[axis] {
                 axis = i;
+                dir = 1.0;
             }
 
             if aabb2.min[i] > aabb1.max[i] { return None; } // Nonintersecting and moving apart
@@ -177,7 +180,7 @@ pub fn sweep_aabb(
                 t_first = entry[i].max(t_first); 
             }
             if aabb1.max[i] > aabb2.min[i] { 
-                t_last = if relative_ne!(v[i], 0.0) {exit / v[i]} else {f32::INFINITY}.min(t_first); 
+                t_last = (exit / v[i]).min(t_last); 
             }
         }
 
@@ -186,7 +189,7 @@ pub fn sweep_aabb(
     }
 
     let mut normal = Vector3::zero();
-    normal[axis] = entry[axis].signum();
+    normal[axis] = dir;
 
     Some((t_first, t_last, normal))
 }
