@@ -210,11 +210,11 @@ impl<'a> specs::System<'a> for CollisionSystem {
             if collision {
                 lazy.exec_mut(move |world| {
                     unsafe {
-                        let world = world as *mut specs::World;
-                        if let Some(ref mutex) = (&*world).read_resource::<res::Lua>().0 {
+                        let res = &mut world.res as *mut specs::Resources;
+                        if let Some(ref mutex) = world.read_resource::<res::Lua>().0 {
                             let lua = mutex.lock().unwrap();
 
-                            let coll = (&*world).read_storage::<comp::Collider>();
+                            let coll = world.read_storage::<comp::Collider>();
 
                             let (cb1, cb2) = (
                                 coll.get(e1).unwrap()
@@ -225,10 +225,10 @@ impl<'a> specs::System<'a> for CollisionSystem {
 
                             if cb1.is_some() || cb2.is_some() {
                                 if let Some(cb) = cb1.and_then(|x| lua.registry_value::<LuaFunction>(&x).ok()) {
-                                    cb.call::<_, ()>((LuaWorld(world), LuaEntity(e1), LuaEntity(e2))).unwrap();
+                                    cb.call::<_, ()>((LuaWorld(res), LuaEntity(e1), LuaEntity(e2))).unwrap();
                                 }
                                 if let Some(cb) = cb2.and_then(|x| lua.registry_value::<LuaFunction>(&x).ok()) {
-                                    cb.call::<_, ()>((LuaWorld(world), LuaEntity(e2), LuaEntity(e1))).unwrap();
+                                    cb.call::<_, ()>((LuaWorld(res), LuaEntity(e2), LuaEntity(e1))).unwrap();
                                 }
                             }
                         }

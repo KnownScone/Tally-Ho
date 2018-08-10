@@ -1,3 +1,5 @@
+pub mod types;
+
 mod parse;
 pub use self::parse::ComponentParser;
 
@@ -11,9 +13,7 @@ use std::rc::Rc;
 
 use specs;
 use specs::Builder;
-use shred::{Accessor, AccessorCow, CastFrom, DispatcherBuilder, DynamicSystemData, MetaTable, Read, Resource,
-            ResourceId, Resources,
-            System, SystemData};
+use shred;
 use shred::cell::{Ref, RefMut};
 use cgmath::Vector3;
 use rlua::{Lua, Table, RegistryKey, Value as LuaValue, Result as LuaResult, Function as LuaFunction, Error as LuaError, String as LuaString,
@@ -30,11 +30,6 @@ impl UserData for LuaEntity {
     }
 }
 
-#[derive(Clone)]
-pub struct LuaWorld(pub *mut specs::World);
-
-unsafe impl Send for LuaWorld { }
-
 #[derive(Debug)]
 pub enum ScriptError {
     InvalidEntity(String),
@@ -46,14 +41,20 @@ impl From<LuaError> for ScriptError {
     fn from(error: LuaError) -> Self {
         ScriptError::LuaError(error)
     }
-} 
+}
+        
+#[derive(Clone)]
+pub struct LuaWorld(pub *const specs::Resources);
+
+unsafe impl Send for LuaWorld { }
 
 pub type ScriptResult<T> = Result<T, ScriptError>;
 
 macro_rules! script {
     (components: [ $(($lua_names:expr) = $comp_names:ident: $comp_types:ty),* ],
+    // For types implementing LuaCtor
+    types: [ $($types:ty),* ],
     functions: [ $(($func_names:expr) = $funcs:expr),* ]) => {
-
         impl UserData for LuaWorld {
             fn add_methods(methods: &mut UserDataMethods<Self>) {
                 $(
@@ -62,9 +63,15 @@ macro_rules! script {
             }
         }
 
-        pub struct Script;
+        pub struct Script(());
 
         impl Script {
+            pub fn new(lua: &Lua) -> Script {
+                $(<$types as types::LuaCtor>::add_ctors(lua);)*
+
+                Script(())
+            }
+
             fn parse_component<'a>(&self, lua: &Lua, lua_name: &str, data: LuaValue, eb: specs::EntityBuilder<'a>) -> ScriptResult<specs::EntityBuilder<'a>> {
                 match lua_name {
                     $($lua_names => {
@@ -94,28 +101,48 @@ macro_rules! script {
 
 script!(
     components: [
-        ("transform") = Transform: comp::Transform,
-        ("velocity")  = Velocity: comp::Velocity,
-        ("collider")  = Collider: comp::Collider,
-        ("sprite")    = Sprite: comp::Sprite,
-        ("tile_map")  = TileMap: comp::TileMap
+        ("transform") = transform: comp::Transform,
+        ("velocity")  = velocity: comp::Velocity,
+        ("collider")  = collider: comp::Collider,
+        ("sprite")    = sprite: comp::Sprite,
+        ("tile_map")  = tile_map: comp::TileMap,
+    ],
+    types: [
+        types::Vector2f,
+        types::Vector3f
     ],
     functions: [
-        ("position") = |_, this: &LuaWorld, entity: LuaEntity| -> LuaResult<(f32, f32, f32)> {
+        ("position") = |_, this: &LuaWorld, entity: LuaEntity| -> LuaResult<types::Vector3f> {
             unsafe {
-                let world = &*this.0;
-                let storage = world.read_storage::<comp::Transform>();
-                Ok(storage.get(entity.0).unwrap().pos.into())
+                let res = &*this.0;
+                let storage: specs::ReadStorage<comp::Transform> = specs::SystemData::fetch(&res);
+                Ok(types::Vector3f(storage.get(entity.0).unwrap().pos))
             }
         },
-        ("move") = |_, this: &LuaWorld, (entity, x, y, z): (LuaEntity, f32, f32, f32)| {
+        ("move") = |_, this: &LuaWorld, (entity, vec): (LuaEntity, types::Vector3f)| {
             unsafe {
-                let world = &*this.0;
-                let mut storage = world.write_storage::<comp::Transform>();
+                let res = &*this.0;
+                let mut storage: specs::WriteStorage<comp::Transform> = specs::SystemData::fetch(&res);
                 let comp = storage.get_mut(entity.0).unwrap();
-                comp.pos += Vector3::new(x, y, z);
+                comp.pos += vec.0;
             }
             Ok(())
+        },
+        ("set_velocity") = |_, this: &LuaWorld, (entity, vec): (LuaEntity, types::Vector3f)| {
+            unsafe {
+                let res = &*this.0;
+                let mut storage: specs::WriteStorage<comp::Velocity> = specs::SystemData::fetch(&res);
+                let comp = storage.get_mut(entity.0).unwrap();
+                comp.pos = vec.0;
+            }
+            Ok(())
+        },
+        ("is_pressed") = |_, this: &LuaWorld, input_index: usize| -> LuaResult<bool> {
+            unsafe {
+                let res = &*this.0;
+                let input_list: shred::Fetch<res::input::InputList> = res.fetch();
+                Ok(input_list.inputs[input_index].map(|x| x == res::input::InputState::Pressed).unwrap_or(false))
+            }
         }
     ]
 );

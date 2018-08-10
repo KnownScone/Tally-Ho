@@ -409,11 +409,13 @@ fn main() {
     game.world.add_resource(res::DynamicState(None));
     game.world.add_resource(res::InputList::new());
 
-    let script = script::Script;
-
     {
         let mutex = game.world.read_resource::<res::Lua>().0.as_ref().unwrap().clone();
         let lua = mutex.lock().unwrap();
+
+        // TODO: THIS SUCKS ASS! Maybe make the script a resource and have it own the lua instance too?
+        let script = script::Script::new(&lua);
+
         let mut file = File::open("assets/scripts/test.lua")
             .expect("File was not found");
         
