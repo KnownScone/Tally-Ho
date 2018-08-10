@@ -407,6 +407,7 @@ fn main() {
     game.world.add_resource(res::Queue(Some(queue.clone())));    
     game.world.add_resource(res::Framebuffer(None));    
     game.world.add_resource(res::DynamicState(None));
+    game.world.add_resource(res::InputList::new());
 
     let script = script::Script;
 
@@ -432,8 +433,28 @@ fn main() {
     // * Submitting a command produces a future, which holds required resources for as long as they are in use by the GPU.
     let mut previous_frame_end = Box::new(tex_future) as Box<GpuFuture>;
     let mut recreate_swapchain = false;
-    let mut running = true;
-    while running {
+    'running: loop {
+        let mut running = true;
+        events_loop.poll_events(|ev| {
+            match ev {
+                winit::Event::WindowEvent { event: winit::WindowEvent::Closed, .. } => { 
+                    info!("Window closing");
+                    running = false;
+                },
+                winit::Event::WindowEvent { event: winit::WindowEvent::KeyboardInput { input: key, .. }, .. } => {
+                    if let Some((input, state)) = res::input::key_to_input(&key) {
+                        (*game.world.write_resource::<res::InputList>())
+                            .set_input(input, state);
+                    }
+                },
+                _ => ()
+            }
+        });
+
+        if !running {
+            break 'running;
+        }
+
         // Frees up resources that are no longer needed by checking what the GPU has already processed.
         previous_frame_end.cleanup_finished();
 
@@ -544,16 +565,6 @@ fn main() {
                 previous_frame_end = Box::new(vulkano::sync::now(device.clone())) as Box<_>;
             }
         }
-
-        events_loop.poll_events(|ev| {
-            match ev {
-                winit::Event::WindowEvent { event: winit::WindowEvent::Closed, .. } => { 
-                    info!("Window closing");
-                    running = false
-                },
-                _ => ()
-            }
-        });
     }
 }
 

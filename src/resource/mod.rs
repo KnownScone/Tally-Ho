@@ -1,6 +1,9 @@
 mod render;
 pub use self::render::{RenderId, SortedRender};
 
+pub mod input;
+pub use self::input::{InputList};
+
 use std::sync::{Mutex, Arc};
 
 use vulkano as vk;
