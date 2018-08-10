@@ -157,7 +157,7 @@ pub fn sweep_aabb(
 
             if aabb2.max[i] < aabb1.min[i] { return None; } // Nonintersecting and moving apart
             if aabb1.max[i] < aabb2.min[i] { 
-                t_first = inv_entry[i].max(t_first); 
+                t_first = entry[i].max(t_first); 
             }
             if aabb2.max[i] > aabb1.min[i] { 
                 t_last = if relative_ne!(v[i], 0.0) {exit / v[i]} else {f32::INFINITY}.min(t_first); 
@@ -165,7 +165,7 @@ pub fn sweep_aabb(
         }
         if v[i] > 0.0 {
             inv_entry[i] = aabb1.min[i] - aabb2.max[i];
-            entry[i] = if relative_ne!(v[i], 0.0) {inv_entry[i] / v[i]} else {f32::INFINITY};
+            entry[i] = if relative_ne!(v[i], 0.0) {inv_entry[i] / v[i]} else {-f32::INFINITY};
             let exit = aabb1.max[i] - aabb2.min[i];
 
             if entry[i] > entry[axis] {
@@ -174,7 +174,7 @@ pub fn sweep_aabb(
 
             if aabb2.min[i] > aabb1.max[i] { return None; } // Nonintersecting and moving apart
             if aabb2.max[i] < aabb1.min[i] { 
-                t_first = inv_entry[i].max(t_first); 
+                t_first = entry[i].max(t_first); 
             }
             if aabb1.max[i] > aabb2.min[i] { 
                 t_last = if relative_ne!(v[i], 0.0) {exit / v[i]} else {f32::INFINITY}.min(t_first); 
@@ -198,14 +198,14 @@ fn test_sweep_aabb() {
         Vector3::new(1.0, 1.0, 1.0),
     );
 
-    let pos1 = Vector3::new(-3.0, 0.0, 0.0);
+    let pos1 = Vector3::new(-4.0, 0.0, 0.0);
     let disp1 = Vector3::new(6.0, 0.0, 0.0);
     
     let pos2 = Vector3::new(3.0, 0.0, 0.0);
     let disp2 = Vector3::new(-6.0, 0.0, 0.0);
 
-    let (t_first, t_last) = sweep_aabb(aabb, pos1, disp1, aabb, pos2, disp2)
+    let (t_first, t_last, norm) = sweep_aabb(aabb, pos1, disp1, aabb, pos2, disp2)
         .expect("No hit");
 
-    assert_eq!((t_first + t_last) / 2.0, 0.5);
+    assert_eq!(t_first, 0.5);
 }
