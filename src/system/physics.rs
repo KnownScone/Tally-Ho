@@ -17,11 +17,12 @@ impl<'a> specs::System<'a> for VelocitySystem {
         use specs::Join;
 
         let dt = dt.0;
-        
+
         for (mut tran, vel) in (&mut tran.restrict_mut(), &vel).join() {
             if relative_ne!(vel.pos, Vector3::zero()) {
                 let tran = tran.get_mut_unchecked();
-                tran.pos += vel.pos * dt;
+                
+                tran.pos += vel.pos.map(|x| if x.is_nan() {0.0} else {x}) * dt;
             }
         }
     }
