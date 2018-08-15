@@ -22,7 +22,7 @@ pub struct Chunk {
 #[derive(Debug, PartialEq, FromPrimitive)]
 pub enum LayerProperty {
     TileIndex = 0,
-    Passable,
+    Blocking,
 }
 
 #[derive(Debug)]

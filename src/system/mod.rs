@@ -5,7 +5,7 @@ mod render;
 pub use self::render::{RenderSystem};
 
 mod tilemap;
-pub use self::tilemap::{TileMapSystem};
+pub use self::tilemap::{TileMapSystem, TileMapRenderSystem, TileMapCollisionSystem};
 
 mod sprite;
 pub use self::sprite::{SpriteSystem};

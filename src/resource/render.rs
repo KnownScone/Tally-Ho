@@ -2,7 +2,7 @@ use specs;
 
 pub enum RenderId {
     Sprite(specs::Entity),
-    TileStrip(specs::Entity, usize)
+    TileStrip(specs::Entity)
 }
 
 #[derive(Default)]

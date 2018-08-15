@@ -47,10 +47,11 @@ where
         specs::Write<'a, res::SortedRender>,
         specs::ReadStorage<'a, comp::Sprite>,
         specs::ReadStorage<'a, comp::TileMap>,
+        specs::ReadStorage<'a, comp::RenderStrip>,
         specs::ReadStorage<'a, comp::Transform>
     );
 
-    fn run(&mut self, (device, queue, framebuffer, state, view_proj, tex_set, mut sort_rndr, sprite, map, tran): Self::SystemData) {
+    fn run(&mut self, (device, queue, framebuffer, state, view_proj, tex_set, mut sort_rndr, sprite, map, strip, tran): Self::SystemData) {
         let queue = queue.0.as_ref().unwrap();
         let device = device.0.as_ref().unwrap();
         let framebuffer = framebuffer.0.as_ref().unwrap();
@@ -69,11 +70,11 @@ where
 
                             (t, b)
                         },
-                        res::RenderId::TileStrip(e, idx) => {
-                            let t = tran.get(e).unwrap();
-                            let m = map.get(e).unwrap();
-                            let s = &m.strips[idx];
-                            let b = t.pos.y + (m.tile_dims.y * (s.pos().y + 1) as f32);
+                        res::RenderId::TileStrip(e) => {
+                            let s = strip.get(e).unwrap();
+                            let t = tran.get(s.tile_map()).unwrap();
+                            let m = map.get(s.tile_map()).unwrap();
+                            let b = t.pos.y + (m.tile_dims().y * (s.pos().y + 1) as f32);
 
                             (t, b)
                         }
@@ -126,9 +127,9 @@ where
                         (fs::ty::PER_OBJECT { imgIdx: sprite.image_index })
                     ).unwrap();
                 },
-                res::RenderId::TileStrip(e, idx) => {
-                    let map = map.get(e).unwrap();
-                    let strip = &map.strips[idx];
+                res::RenderId::TileStrip(e) => {
+                    let strip = strip.get(e).unwrap();
+                    let map = map.get(strip.tile_map()).unwrap();
 
                     let instance_set = map.instance_set.as_ref().unwrap();
                     let v_buf = strip.vertex_buf.as_ref().unwrap();
@@ -140,7 +141,7 @@ where
                         vec![v_buf.clone()],
                         i_buf.clone(),
                         (instance_set.clone(), view_proj.clone(), tex_set.clone()),
-                        (fs::ty::PER_OBJECT { imgIdx: map.image_index })
+                        (fs::ty::PER_OBJECT { imgIdx: map.image_index() })
                     ).unwrap();
                 }
             }

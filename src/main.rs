@@ -50,6 +50,8 @@ use vk::descriptor::descriptor_set::FixedSizeDescriptorSetsPool;
 use vk::sync::{now, GpuFuture};
 use vk::device::{Device};
 
+use specs::Builder;
+
 use cgmath::{ortho, Matrix4};
 
 use winit::{EventsLoop, WindowBuilder};
@@ -340,14 +342,16 @@ fn main() {
         .build().unwrap());
     info!("Texture set initialized");
 
-    let tile_map_sys = {
+    let tile_map_sys = sys::TileMapSystem;
+
+    let tile_map_rndr_sys = {
         let instance_sets = FixedSizeDescriptorSetsPool::new(pipeline.clone(), 0);
         let instance_buf = CpuBufferPool::<vs::ty::Instance>::new(
             device.clone(),
             vk::buffer::BufferUsage::uniform_buffer() | vk::buffer::BufferUsage::transfer_source(),
         );
 
-        sys::TileMapSystem::new(instance_sets, instance_buf)
+        sys::TileMapRenderSystem::new(instance_sets, instance_buf)
     };
     
     let sprite_sys = {
@@ -367,37 +371,44 @@ fn main() {
     let collision_sys = sys::CollisionSystem::new();
 
     let mut logic_disp = specs::DispatcherBuilder::new()
+        .with(tile_map_sys, "tile_map", &[])
         .with(velocity_sys, "velocity", &[])
         .with(collision_sys, "collision", &["velocity"])
         .build();
 
     let mut render_disp = specs::DispatcherBuilder::new()
+        .with(tile_map_rndr_sys, "tile_map_render", &[])
         .with(sprite_sys, "sprite", &[])
-        .with(tile_map_sys, "tile_map", &[])
-        .with(render_sys, "render", &["sprite", "tile_map"])
+        .with(render_sys, "render", &["sprite", "tile_map_render"])
         .build();
 
     let mut game = game::Game::new(1.0/60.0, logic_disp, render_disp);
     
+    let parsed_tile_map = parse::tile_map(b"\x05\x04dust\
+    \x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x00\x02\x02\
+    \x00\
+        \x00\x00\x00\x01\x00\x00\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\
+        \x00\x02\x00\x03\x00\x02\x00\x03\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\
+    \x01\
+        \x00\x01\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\
+        \x00\x01\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"
+    ).unwrap().1;
+
     let mut tile_map = comp::TileMap::new(
         cgmath::Vector3::new(0.1, 0.1, 0.1),
         cgmath::Vector2::new(2, 2),
         0,
+        Some(parsed_tile_map)
     );
-    
-    let parsed_tile_map = parse::tile_map(b"\x05\x04dust\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x00\x02\x01\x00\
-    \x00\x00\x00\x01\x00\x00\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\
-    \x00\x02\x00\x03\x00\x02\x00\x03\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01").unwrap().1;
-    tile_map.load(parsed_tile_map);
 
-    // let _e = game.world.create_entity()
-    //     .with(
-    //         tile_map
-    //     )
-    //     .with(comp::Transform {
-    //         pos: cgmath::Vector3::new(0.0, 0.0, 0.0),
-    //     })
-    // .build(); 
+    let _e = game.world.create_entity()
+        .with(
+            tile_map
+        )
+        .with(comp::Transform::new(
+            cgmath::Vector3::new(0.0, 0.0, 0.0)
+        ))
+    .build(); 
 
     // TODO: We need to find some way to occasionally call "expire_registry_values" on lua.
     game.world.add_resource(res::Lua(Some(Arc::new(Mutex::new(rlua::Lua::new())))));
@@ -427,7 +438,7 @@ fn main() {
             .expect("Script failed to execute");
 
         let _e = script.parse_entity(&lua, "stuff", game.world.create_entity()).unwrap();
-        let _e = script.parse_entity(&lua, "stuff2", game.world.create_entity()).unwrap();
+        // let _e = script.parse_entity(&lua, "stuff2", game.world.create_entity()).unwrap();
         // let e = script.parse_entity("stuff_map", game.world.create_entity()).unwrap();
     }
 

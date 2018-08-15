@@ -8,7 +8,7 @@ pub mod sprite;
 pub use self::sprite::{Sprite};
 
 pub mod tilemap;
-pub use self::tilemap::{TileMap};
+pub use self::tilemap::{TileMap, RenderStrip, CollisionStrip};
 
 pub mod collider;
 pub use self::collider::{Collider};
