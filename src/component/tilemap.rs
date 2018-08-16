@@ -1,5 +1,5 @@
 use ::Vertex;
-use ::utility::Rect2;
+use ::utility::{Rect2, Rect3};
 use ::script::{ScriptResult, ScriptError, ComponentParser};
 use ::parse;
 
@@ -14,7 +14,6 @@ use specs;
 pub const STRIP_LENGTH: usize = 10;
 
 pub struct TileMap {
-    pub instance_set: Option<Arc<vk::descriptor::DescriptorSet + Send + Sync>>,
     tile_dims: Vector3<f32>,
     
     // How many sub-textures in each dimension.
@@ -27,7 +26,6 @@ pub struct TileMap {
 impl TileMap {
     pub fn new(tile_dims: Vector3<f32>, tex_dims: Vector2<u32>, image_index: u32, load: Option<parse::TileMap>) -> TileMap {
         TileMap {
-            instance_set: None,
             tile_dims,
             tex_dims,
             image_index,
@@ -112,6 +110,8 @@ pub struct CollisionStrip {
     pos: Vector3<u32>,
 
     pub blocking: [bool; STRIP_LENGTH],
+
+    pub colliders: Vec<specs::Entity>,
 }
 
 impl CollisionStrip {
@@ -124,6 +124,7 @@ impl CollisionStrip {
             tile_map,
             pos,
             blocking,
+            colliders: Vec::new(),
         }
     }
 

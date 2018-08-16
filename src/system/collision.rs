@@ -113,8 +113,6 @@ impl<'a> specs::System<'a> for CollisionSystem {
             {
                 let t1 = tran.get(e1).unwrap();
                 let t2 = tran.get(e2).unwrap();
-                let v1 = vel.get(e1).unwrap();
-                let v2 = vel.get(e2).unwrap();
                 let disp1 = t1.pos - t1.last_pos;
                 let disp2 = t2.pos - t2.last_pos;
 
@@ -204,16 +202,18 @@ impl<'a> specs::System<'a> for CollisionSystem {
                 t.pos = pos;
             }
             if let Some(new_vel) = new_vel1 {
-                let v = vel.get_mut(e1).unwrap();
-                v.pos = new_vel;
+                if let Some(v) = vel.get_mut(e1) {
+                    v.pos = new_vel;
+                }
             }
             if let Some(pos) = new_pos2 {
                 let t = tran.get_mut(e2).unwrap();
                 t.pos = pos;
             }
             if let Some(new_vel) = new_vel2 {
-                let v = vel.get_mut(e2).unwrap();
-                v.pos = new_vel;
+                if let Some(v) = vel.get_mut(e2) {
+                    v.pos = new_vel;
+                }
             }
 
             if collision {

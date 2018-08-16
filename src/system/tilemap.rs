@@ -9,7 +9,7 @@ use std::sync::Arc;
 use vulkano as vk;
 use vk::descriptor::descriptor_set::FixedSizeDescriptorSetsPool;
 use vk::buffer::CpuBufferPool;
-use cgmath::{Vector2, Vector3, Matrix4};
+use cgmath::{Vector2, Vector3, Matrix4, Zero};
 use specs;
 
 pub struct TileMapSystem;
@@ -161,12 +161,13 @@ impl TileMapCollisionSystem {
 impl<'a> specs::System<'a> for TileMapCollisionSystem {
     type SystemData = (
         specs::Entities<'a>, 
-        specs::ReadStorage<'a, comp::Transform>, 
+        specs::WriteStorage<'a, comp::Transform>,
         specs::WriteStorage<'a, comp::TileMap>,
+        specs::WriteStorage<'a, comp::Collider>,
         specs::WriteStorage<'a, comp::CollisionStrip>,
     );
 
-    fn run(&mut self, (ents, tran, mut map, mut strip): Self::SystemData) {
+    fn run(&mut self, (ents, mut trans, mut map, mut colls, mut strip): Self::SystemData) {
         use specs::Join;
 
         self.ins_collision_strip.clear();
@@ -174,6 +175,53 @@ impl<'a> specs::System<'a> for TileMapCollisionSystem {
         
         strip.populate_inserted(&mut self.collision_strip_ins_read.as_mut().unwrap(), &mut self.ins_collision_strip);
         strip.populate_modified(&mut self.collision_strip_mod_read.as_mut().unwrap(), &mut self.mod_collision_strip);
+
+        for (mut strip, _) in (&mut strip, &self.ins_collision_strip).join() {
+            let map = map.get(strip.tile_map()).unwrap();
+            
+            let strip_pos = Vector3::new(
+                strip.pos().x as f32 * comp::tilemap::STRIP_LENGTH as f32 * map.tile_dims().x,
+                strip.pos().y as f32 * comp::tilemap::STRIP_LENGTH as f32 * map.tile_dims().y,
+                strip.pos().z as f32 * comp::tilemap::STRIP_LENGTH as f32 * map.tile_dims().z
+            );
+            
+            for (idx, tile) in strip.blocking.iter().enumerate() {
+                // If this tile does not block, try the next one.
+                if !*tile {
+                    continue;
+                }
+
+                let tile_pos = Vector3::new(
+                    idx as f32 * map.tile_dims().x,
+                    0.0,
+                    0.0
+                );
+
+                let coll = comp::Collider::new(
+                    comp::collider::Shape::AABB(
+                        Rect3::new(
+                            Vector3::zero(),
+                            map.tile_dims(),
+                        )
+                    ), 
+                    false, 
+                    None
+                );
+
+                let tran = comp::Transform::new(
+                    strip_pos + tile_pos,
+                );
+
+                let e = ents.build_entity()
+                    .with(tran, &mut trans)
+                    .with(coll, &mut colls)
+                .build();
+
+                strip.colliders.push(e);
+            }
+        }
+
+        // TODO: When a strip has been modified
     }
 
     fn setup(&mut self, res: &mut specs::Resources) {
@@ -186,56 +234,34 @@ impl<'a> specs::System<'a> for TileMapCollisionSystem {
     }
 }
 
-pub struct TileMapRenderSystem<L> {
-    instance_sets: FixedSizeDescriptorSetsPool<Arc<L>>,
-    instance_buf: CpuBufferPool<vs::ty::Instance>,
-
+pub struct TileMapRenderSystem {
     render_strip_ins_read: Option<specs::ReaderId<specs::InsertedFlag>>,
     render_strip_mod_read: Option<specs::ReaderId<specs::ModifiedFlag>>,
     ins_render_strip: specs::BitSet,
     mod_render_strip: specs::BitSet,
-
-    transform_ins_read: Option<specs::ReaderId<specs::InsertedFlag>>,
-    transform_mod_read: Option<specs::ReaderId<specs::ModifiedFlag>>,
-    updt_transform: specs::BitSet,
 }
 
-impl<L> TileMapRenderSystem<L>
-where
-    L: vk::descriptor::PipelineLayoutAbstract + vk::pipeline::GraphicsPipelineAbstract + Send + Sync + 'static,
-{
-    pub fn new(
-        instance_sets: FixedSizeDescriptorSetsPool<Arc<L>>,
-        instance_buf: CpuBufferPool<vs::ty::Instance>,
-    ) -> TileMapRenderSystem<L> {
+impl TileMapRenderSystem {
+    pub fn new() -> TileMapRenderSystem {
         TileMapRenderSystem {
-            instance_sets,
-            instance_buf,
             render_strip_ins_read: None,
             render_strip_mod_read: None,
             ins_render_strip: specs::BitSet::new(),
             mod_render_strip: specs::BitSet::new(),
-            transform_ins_read: None,
-            transform_mod_read: None,
-            updt_transform: specs::BitSet::new(),
         }
     }
 }
 
-impl<'a, L> specs::System<'a> for TileMapRenderSystem<L>
-where
-    L: vk::descriptor::PipelineLayoutAbstract + vk::pipeline::GraphicsPipelineAbstract + Send + Sync + 'static,
-{
+impl<'a> specs::System<'a> for TileMapRenderSystem {
     type SystemData = (
         specs::Read<'a, res::Queue>,
         specs::Write<'a, res::SortedRender>,
         specs::Entities<'a>,
-        specs::ReadStorage<'a, comp::Transform>,
-        specs::WriteStorage<'a, comp::TileMap>,
+        specs::ReadStorage<'a, comp::TileMap>,
         specs::WriteStorage<'a, comp::RenderStrip>,
     );
 
-    fn run(&mut self, (queue, mut sort_rndr, ent, tran, mut map, mut strip): Self::SystemData) {
+    fn run(&mut self, (queue, mut sort_rndr, ent, map, mut strip): Self::SystemData) {
         use specs::Join;
 
         let queue = queue.0.as_ref().unwrap();
@@ -243,33 +269,9 @@ where
         // Get the components in need of initialization or an update.
         self.ins_render_strip.clear();
         self.mod_render_strip.clear();
-        self.updt_transform.clear();
         
         strip.populate_inserted(&mut self.render_strip_ins_read.as_mut().unwrap(), &mut self.ins_render_strip);
         strip.populate_modified(&mut self.render_strip_mod_read.as_mut().unwrap(), &mut self.mod_render_strip);
-        tran.populate_inserted(&mut self.transform_ins_read.as_mut().unwrap(), &mut self.updt_transform);
-        tran.populate_modified(&mut self.transform_mod_read.as_mut().unwrap(), &mut self.updt_transform);
-
-        for (tran, map, _) in (&tran, &mut map, &self.updt_transform).join() {
-            let instance_data = vs::ty::Instance {
-                transform: Matrix4::from_translation(tran.pos).into(),
-            };
-
-            let instance_subbuf = self.instance_buf.next(instance_data)
-                .expect("Couldn't build instance sub-buffer");
-
-            // Creates a descriptor set with the newly-allocated subbuffer (containing our instance data).
-            let set = Arc::new(
-                self.instance_sets.next()
-                    .add_buffer(instance_subbuf).unwrap()
-                    .build().unwrap()
-            );
-
-            map.instance_set = Some(set);
-
-            // After updating the transform data, the tile map needs to be resorted.
-            sort_rndr.need_sort = true;
-        }
 
         for (ent, mut strip, _) in (&*ent, &mut strip, &self.ins_render_strip | &self.mod_render_strip).join() {
             // Create the vertex and index buffers for all the strips without them.
@@ -354,9 +356,5 @@ where
         let mut rndr_strip_storage: specs::WriteStorage<comp::RenderStrip> = SystemData::fetch(&res);
         self.render_strip_ins_read = Some(rndr_strip_storage.track_inserted());
         self.render_strip_mod_read = Some(rndr_strip_storage.track_modified());
-
-        let mut tran_storage: specs::WriteStorage<comp::Transform> = SystemData::fetch(&res);
-        self.transform_ins_read = Some(tran_storage.track_inserted());
-        self.transform_mod_read = Some(tran_storage.track_modified());
     }
 }

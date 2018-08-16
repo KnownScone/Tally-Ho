@@ -1,17 +1,19 @@
-use ::fs;
+use ::{fs, vs};
 use ::component as comp;
 use ::resource as res;
 
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::sync::mpsc;
 
 use vulkano as vk;
 use vk::command_buffer::{AutoCommandBuffer, AutoCommandBufferBuilder};
 use dmsort;
 use specs;
+use cgmath;
 
 pub struct RenderSystem<L> {
     pipeline: Arc<L>,
+    default_instance: Arc<vk::descriptor::DescriptorSet + Send + Sync>,
     
     cmd_buf_tx: mpsc::Sender<AutoCommandBuffer>
 }
@@ -22,11 +24,28 @@ where
 {
     pub fn new(
         pipeline: Arc<L>,
+        queue: Arc<vk::device::Queue>,
     ) -> (RenderSystem<L>, mpsc::Receiver<AutoCommandBuffer>) {
+        use vk::descriptor::descriptor_set::*;
+        use cgmath::One;
+
         let (tx, rx) = mpsc::channel();
 
+        let (inst_buf, future) = vk::buffer::ImmutableBuffer::from_data(
+            vs::ty::Instance {
+                transform: cgmath::Matrix4::one().into(),
+            },
+            vk::buffer::BufferUsage::uniform_buffer(),
+            queue
+        ).unwrap();
+
+        let set = PersistentDescriptorSet::start(pipeline.clone(), 0)
+            .add_buffer(inst_buf).unwrap()
+        .build().unwrap();
+
         (RenderSystem {
-            pipeline: pipeline.clone(),
+            pipeline: pipeline,
+            default_instance: Arc::new(set),
             cmd_buf_tx: tx
         },
         rx)
@@ -68,24 +87,24 @@ where
                             let s = sprite.get(e).unwrap();
                             let b = t.pos.y + s.bounds.max.y;
 
-                            (t, b)
+                            (t.pos.z, b)
                         },
                         res::RenderId::TileStrip(e) => {
                             let s = strip.get(e).unwrap();
-                            let t = tran.get(s.tile_map()).unwrap();
                             let m = map.get(s.tile_map()).unwrap();
-                            let b = t.pos.y + (m.tile_dims().y * (s.pos().y + 1) as f32);
+                            let b = m.tile_dims().y * (s.pos().y + 1) as f32;
+                            let l = s.pos().z as f32 * m.tile_dims().z;
 
-                            (t, b)
+                            (l, b)
                         }
                     }
                 };
 
-                let (t1, b1) = get_values(id1);
-                let (t2, b2) = get_values(id2);
+                let (l1, b1) = get_values(id1);
+                let (l2, b2) = get_values(id2);
 
                 use std::cmp::Ordering;
-                let order = t1.pos.z.partial_cmp(&t2.pos.z).unwrap();
+                let order = l1.partial_cmp(&l2).unwrap();
 
                 match order {
                     Ordering::Less => order,
@@ -131,7 +150,6 @@ where
                     let strip = strip.get(e).unwrap();
                     let map = map.get(strip.tile_map()).unwrap();
 
-                    let instance_set = map.instance_set.as_ref().unwrap();
                     let v_buf = strip.vertex_buf.as_ref().unwrap();
                     let i_buf = strip.index_buf.as_ref().unwrap();
 
@@ -140,7 +158,7 @@ where
                         state.clone(),
                         vec![v_buf.clone()],
                         i_buf.clone(),
-                        (instance_set.clone(), view_proj.clone(), tex_set.clone()),
+                        (self.default_instance.clone(), view_proj.clone(), tex_set.clone()),
                         (fs::ty::PER_OBJECT { imgIdx: map.image_index() })
                     ).unwrap();
                 }

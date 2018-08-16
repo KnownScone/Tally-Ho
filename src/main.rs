@@ -344,15 +344,9 @@ fn main() {
 
     let tile_map_sys = sys::TileMapSystem;
 
-    let tile_map_rndr_sys = {
-        let instance_sets = FixedSizeDescriptorSetsPool::new(pipeline.clone(), 0);
-        let instance_buf = CpuBufferPool::<vs::ty::Instance>::new(
-            device.clone(),
-            vk::buffer::BufferUsage::uniform_buffer() | vk::buffer::BufferUsage::transfer_source(),
-        );
+    let tile_map_rndr_sys = sys::TileMapRenderSystem::new();
 
-        sys::TileMapRenderSystem::new(instance_sets, instance_buf)
-    };
+    let tile_map_coll_sys = sys::TileMapCollisionSystem::new();
     
     let sprite_sys = {
         let instance_sets = FixedSizeDescriptorSetsPool::new(pipeline.clone(), 0);
@@ -364,7 +358,7 @@ fn main() {
         sys::SpriteSystem::new(instance_sets, instance_buf)
     };
 
-    let (render_sys, cmd_buf_rx) = sys::RenderSystem::new(pipeline.clone());
+    let (render_sys, cmd_buf_rx) = sys::RenderSystem::new(pipeline.clone(), queue.clone());
 
     let velocity_sys = sys::VelocitySystem;
     
@@ -372,8 +366,9 @@ fn main() {
 
     let mut logic_disp = specs::DispatcherBuilder::new()
         .with(tile_map_sys, "tile_map", &[])
+        .with(tile_map_coll_sys, "tile_map_collision", &["tile_map"])
         .with(velocity_sys, "velocity", &[])
-        .with(collision_sys, "collision", &["velocity"])
+        .with(collision_sys, "collision", &["velocity", "tile_map_collision"])
         .build();
 
     let mut render_disp = specs::DispatcherBuilder::new()
@@ -405,9 +400,6 @@ fn main() {
         .with(
             tile_map
         )
-        .with(comp::Transform::new(
-            cgmath::Vector3::new(0.0, 0.0, 0.0)
-        ))
     .build(); 
 
     // TODO: We need to find some way to occasionally call "expire_registry_values" on lua.
