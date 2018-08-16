@@ -181,8 +181,8 @@ impl<'a> specs::System<'a> for TileMapCollisionSystem {
             
             let strip_pos = Vector3::new(
                 strip.pos().x as f32 * comp::tilemap::STRIP_LENGTH as f32 * map.tile_dims().x,
-                strip.pos().y as f32 * comp::tilemap::STRIP_LENGTH as f32 * map.tile_dims().y,
-                strip.pos().z as f32 * comp::tilemap::STRIP_LENGTH as f32 * map.tile_dims().z
+                strip.pos().y as f32 * map.tile_dims().y,
+                strip.pos().z as f32 * map.tile_dims().z
             );
             
             for (idx, tile) in strip.blocking.iter().enumerate() {
