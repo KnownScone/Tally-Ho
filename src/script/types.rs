@@ -22,6 +22,10 @@ impl UserData for Vector2f {
         methods.add_meta_method_mut(MetaMethod::Add, |_, this, vec: Vector2f| -> LuaResult<Self> {
             Ok(Vector2f(this.0 + vec.0))
         });
+
+        methods.add_meta_method_mut(MetaMethod::Mul, |_, this, mul: f32| -> LuaResult<Self> {
+            Ok(Vector2f(this.0 * mul))
+        });
     }
 }
 
@@ -52,6 +56,10 @@ impl UserData for Vector3f {
 
         methods.add_meta_method_mut(MetaMethod::Add, |_, this, vec: Vector3f| -> LuaResult<Self> {
             Ok(Vector3f(this.0 + vec.0))
+        });
+
+        methods.add_meta_method_mut(MetaMethod::Mul, |_, this, mul: f32| -> LuaResult<Self> {
+            Ok(Vector3f(this.0 * mul))
         });
     }
 }

@@ -18,7 +18,7 @@ stuff = {
         vel = vel + vec3f(1.0, 0.0, 0.0)
       end
       
-      world:set_velocity(this, vel:normalized())
+      world:set_velocity(this, vel:normalized() * 2.0)
     end
   },
   transform = {
@@ -45,6 +45,7 @@ stuff = {
     },
     sweep = true,
     on_collide = function(world, this, other)
+      print(string.format("%s collided with %s", this:id(), other:id()))
     end
   },
   sprite = {
@@ -68,7 +69,7 @@ stuff2 = {
   transform = {
     position = {
       x = -0.5,
-      y = 0.0,
+      y = 0.5,
       z = 0.0
     }
   }, 
@@ -83,9 +84,53 @@ stuff2 = {
       min_x = 0.0,
       min_y = 0.0,
       min_z = 0.0,
-      max_x = 0.3,
-      max_y = 0.3,
-      max_z = 0.3
+      max_x = 0.1,
+      max_y = 0.1,
+      max_z = 0.1
+    },
+    sweep = true,
+    on_collide = function(world, this, other)
+    end
+  },
+  sprite = {
+    bounds = {
+      min_x = 0.0,
+      min_y = 0.0,
+      max_x = 0.1,
+      max_y = 0.1
+    },
+    uv = {
+      min_x = 0.0,
+      min_y = 0.0,
+      max_x = 1.0,
+      max_y = 1.0
+    },
+    image_index = 0,
+  }
+}
+
+stuff3 = {
+  transform = {
+    position = {
+      x = -0.71,
+      y = 0.5,
+      z = 0.0
+    }
+  }, 
+  velocity = {
+    x = 0.0,
+    y = 0.0,
+    z = 0.0
+  },
+  collider = {
+    shape_type = "aabb",
+    shape = {
+      min_x = 0.0,
+      min_y = 0.0,
+      min_z = 0.0,
+      max_x = 0.1,
+      max_y = 0.1,
+      max_z = 0.1
     },
     sweep = true,
     on_collide = function(world, this, other)
@@ -96,8 +141,8 @@ stuff2 = {
     bounds = {
       min_x = 0.0,
       min_y = 0.0,
-      max_x = 0.3,
-      max_y = 0.3
+      max_x = 0.1,
+      max_y = 0.1
     },
     uv = {
       min_x = 0.0,

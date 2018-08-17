@@ -390,7 +390,7 @@ fn main() {
     ).unwrap().1;
 
     let mut tile_map = comp::TileMap::new(
-        cgmath::Vector3::new(0.1, 0.1, 0.1),
+        cgmath::Vector3::new(0.15, 0.15, 0.15),
         cgmath::Vector2::new(2, 2),
         0,
         Some(parsed_tile_map)
@@ -430,7 +430,8 @@ fn main() {
             .expect("Script failed to execute");
 
         let _e = script.parse_entity(&lua, "stuff", game.world.create_entity()).unwrap();
-        // let _e = script.parse_entity(&lua, "stuff2", game.world.create_entity()).unwrap();
+        let _e = script.parse_entity(&lua, "stuff2", game.world.create_entity()).unwrap();
+        let _e = script.parse_entity(&lua, "stuff3", game.world.create_entity()).unwrap();
         // let e = script.parse_entity("stuff_map", game.world.create_entity()).unwrap();
     }
 

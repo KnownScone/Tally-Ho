@@ -8,6 +8,7 @@ use comp::collider::*;
 use std::f32;
 use std::rc::Rc;
 use std::cell::RefCell;
+use std::collections::hash_map::*;
 
 use cgmath::{InnerSpace, ApproxEq, Vector2, Vector3, Zero};
 use specs;
@@ -100,151 +101,179 @@ impl<'a> specs::System<'a> for CollisionSystem {
             self.broad_phase.update(coll.index.unwrap(), bound);
         }
 
+        let mut min_sweep: HashMap<specs::Entity, (f32, usize)> = HashMap::new();
+        let mut collisions: Vec<Collision> = Vec::new();
+
         self.broad_phase.for_each(|(e1, e2)| {
             let c1 = coll.get(e1).unwrap();
             let c2 = coll.get(e2).unwrap();
+            let t1 = tran.get(e1).unwrap();
+            let t2 = tran.get(e2).unwrap();
+            let disp1 = t1.pos - t1.last_pos;
+            let disp2 = t2.pos - t2.last_pos;
 
-            let mut new_pos1 = None;
-            let mut new_pos2 = None;
-            let mut new_vel1 = None;
-            let mut new_vel2 = None;
-            let mut collision = false;
-            
-            {
-                let t1 = tran.get(e1).unwrap();
-                let t2 = tran.get(e2).unwrap();
-                let disp1 = t1.pos - t1.last_pos;
-                let disp2 = t2.pos - t2.last_pos;
+            match (&c1.shape, &c2.shape) {
+                // Discrete AABB-AABB collision.
+                (&Shape::AABB(r1), &Shape::AABB(r2)) 
+                if !c1.sweep && !c2.sweep => {
+                    let r1 = Rect3::new(
+                        t1.pos + r1.min,
+                        t1.pos + r1.max,
+                    );
 
-                match (&c1.shape, &c2.shape) {
-                    // Discrete AABB-AABB collision.
-                    (&Shape::AABB(r1), &Shape::AABB(r2)) 
-                    if !c1.sweep && !c2.sweep => {
-                        let r1 = Rect3::new(
-                            t1.pos + r1.min,
-                            t1.pos + r1.max,
-                        );
+                    let r2 = Rect3::new(
+                        t2.pos + r2.min,
+                        t2.pos + r2.max,
+                    );
 
-                        let r2 = Rect3::new(
-                            t2.pos + r2.min,
-                            t2.pos + r2.max,
-                        );
+                    let pen = penetration_vector(r1, r2);
 
-                        let pen = penetration_vector(r1, r2);
+                    if relative_ne!(pen, Vector3::zero()) {
+                        let d1 = pen / 2.0;
+                        let d2 = -pen / 2.0;
+                        
+                        collisions.push(Collision::Discrete(
+                            e1,
+                            e2,
+                            d1
+                        ));
 
-                        if relative_ne!(pen, Vector3::zero()) {
-                            let d1 = pen / 2.0;
-                            let d2 = -pen / 2.0;
-                            new_pos1 = Some(t1.pos + d1);
-                            new_pos2 = Some(t2.pos + d2);
-                            
-                            // TODO: Set velocity?
+                        collisions.push(Collision::Discrete(
+                            e2,
+                            e1,
+                            d2
+                        ));
+                    }
+                },
+                // Discrete AABB-Circle collision.
+                (&Shape::AABB(r), &Shape::Circle{offset: c_o, radius: c_r, depth: ref c_d}) 
+                    | (&Shape::Circle{offset: c_o, radius: c_r, depth: ref c_d}, &Shape::AABB(r))
+                if !c1.sweep && !c2.sweep => {
+                    // TODO
+                },
+                // Discrete Circle-Circle collision.
+                (&Shape::Circle{offset: c1_o, radius: c1_r, depth: ref c1_d}, &Shape::Circle{offset: c2_o, radius: c2_r, depth: ref c2_d}) 
+                if !c1.sweep && !c2.sweep => {
+                    // TODO
+                },
+                // Sweep AABB-AABB collision.
+                (&Shape::AABB(r1), &Shape::AABB(r2)) 
+                if c1.sweep || c2.sweep => {
+                    if let Some((t_first, t_last, norm)) = sweep_aabb(r1, t1.last_pos, disp1, r2, t2.last_pos, disp2) {
+                        match min_sweep.entry(e1) {
+                            Entry::Occupied(mut entry) => {
+                                // If this TOI (time-of-impact) is earlier than the current one, replace it.
+                                if t_first < entry.get().0 {
+                                    collisions[entry.get().1] = 
+                                        Collision::Sweep(
+                                            e1,
+                                            e2,
+                                            t_first,
+                                            norm
+                                        );
 
-                            collision = true;
-                        }
-                    },
-                    // Discrete AABB-Circle collision.
-                    (&Shape::AABB(r), &Shape::Circle{offset: c_o, radius: c_r, depth: ref c_d}) 
-                        | (&Shape::Circle{offset: c_o, radius: c_r, depth: ref c_d}, &Shape::AABB(r))
-                    if !c1.sweep && !c2.sweep => {
-                        // TODO
-                    },
-                    // Discrete Circle-Circle collision.
-                    (&Shape::Circle{offset: c1_o, radius: c1_r, depth: ref c1_d}, &Shape::Circle{offset: c2_o, radius: c2_r, depth: ref c2_d}) 
-                    if !c1.sweep && !c2.sweep => {
-                        // TODO
-                    },
-                    // Sweep AABB-AABB collision.
-                    (&Shape::AABB(r1), &Shape::AABB(r2)) 
-                    if c1.sweep || c2.sweep => {
-                        if let Some((t_first, t_last, norm)) = sweep_aabb(r1, t1.last_pos, disp1, r2, t2.last_pos, disp2) {
-                            let mut d1 = (disp1 * t_first).map(|x| x - if relative_ne!(x, 0.0) {x.signum() * f32::EPSILON} else {0.0});
-
-                            let time_left = 1.0 - t_first;
-                            let dot = (disp1.x * norm.y + disp1.y * norm.x) * time_left;
-                            let slide = Vector3::new(dot * norm.y, dot * norm.x, 0.0);
-
-                            d1 += slide;
-
-                            new_pos1 = Some(t1.last_pos + d1);
-                            collision = true;
-                        }
-                        if let Some((t_first, t_last, norm)) = sweep_aabb(r2, t2.last_pos, disp2, r1, t1.last_pos, disp1) {
-                            let mut d2 = (disp2 * t_first).map(|x| x - if relative_ne!(x, 0.0) {x.signum() * f32::EPSILON} else {0.0});
-
-                            let time_left = 1.0 - t_first;
-                            let dot = (disp2.x * norm.y + disp2.y * norm.x) * time_left;
-                            let slide = Vector3::new(dot * norm.y, dot * norm.x, 0.0);
-
-                            d2 += slide;
-
-                            new_pos2 = Some(t2.last_pos + d2);
-                            collision = true;
-                        }
-                    },
-                    // Sweep AABB-Circle collision.
-                    (&Shape::AABB(r), &Shape::Circle{offset: c_o, radius: c_r, depth: ref c_d}) 
-                        | (&Shape::Circle{offset: c_o, radius: c_r, depth: ref c_d}, &Shape::AABB(r))
-                    if c1.sweep || c2.sweep => {
-                        // TODO
-                    }, 
-                    // Sweep Circle-Circle collision.
-                    (&Shape::Circle{offset: c1_o, radius: c1_r, depth: ref c1_d}, &Shape::Circle{offset: c2_o, radius: c2_r, depth: ref c2_d}) 
-                    if c1.sweep || c2.sweep => {
-                        // TODO
-                    },
-                    _ => ()
-                }
-            }
-
-            if let Some(pos) = new_pos1 {
-                let t = tran.get_mut(e1).unwrap();
-                t.pos = pos;
-            }
-            if let Some(new_vel) = new_vel1 {
-                if let Some(v) = vel.get_mut(e1) {
-                    v.pos = new_vel;
-                }
-            }
-            if let Some(pos) = new_pos2 {
-                let t = tran.get_mut(e2).unwrap();
-                t.pos = pos;
-            }
-            if let Some(new_vel) = new_vel2 {
-                if let Some(v) = vel.get_mut(e2) {
-                    v.pos = new_vel;
-                }
-            }
-
-            if collision {
-                lazy.exec_mut(move |world| {
-                    unsafe {
-                        let res = &mut world.res as *mut specs::Resources;
-                        if let Some(ref mutex) = world.read_resource::<res::Lua>().0 {
-                            let lua = mutex.lock().unwrap();
-
-                            let coll = world.read_storage::<comp::Collider>();
-
-                            let (cb1, cb2) = (
-                                coll.get(e1).unwrap()
-                                    .on_collide.as_ref(),
-                                coll.get(e2).unwrap()
-                                    .on_collide.as_ref(),
-                            );
-
-                            if cb1.is_some() || cb2.is_some() {
-                                if let Some(cb) = cb1.and_then(|x| lua.registry_value::<LuaFunction>(&x).ok()) {
-                                    cb.call::<_, ()>((LuaWorld(res), LuaEntity(e1), LuaEntity(e2))).unwrap();
+                                    entry.get_mut().0 = t_first;
                                 }
-                                if let Some(cb) = cb2.and_then(|x| lua.registry_value::<LuaFunction>(&x).ok()) {
-                                    cb.call::<_, ()>((LuaWorld(res), LuaEntity(e2), LuaEntity(e1))).unwrap();
-                                }
+                            },
+                            Entry::Vacant(entry) => {
+                                collisions.push(Collision::Sweep(
+                                    e1,
+                                    e2,
+                                    t_first,
+                                    norm
+                                ));
+                                entry.insert((t_first, collisions.len() - 1));
                             }
                         }
+
+                        match min_sweep.entry(e2) {
+                            Entry::Occupied(mut entry) => {
+                                // If this TOI (time-of-impact) is earlier than the current one, replace it.
+                                if t_first < entry.get().0 {
+                                    collisions[entry.get().1] = 
+                                        Collision::Sweep(
+                                            e1,
+                                            e2,
+                                            t_first,
+                                            norm
+                                        );
+
+                                    entry.get_mut().0 = t_first;
+                                }
+                            },
+                            Entry::Vacant(entry) => {
+                                collisions.push(Collision::Sweep(
+                                    e2,
+                                    e1,
+                                    t_first,
+                                    norm
+                                ));
+                                entry.insert((t_first, collisions.len() - 1));
+                            }
+                        }
+
                     }
-                });
+                },
+                // Sweep AABB-Circle collision.
+                (&Shape::AABB(r), &Shape::Circle{offset: c_o, radius: c_r, depth: ref c_d}) 
+                    | (&Shape::Circle{offset: c_o, radius: c_r, depth: ref c_d}, &Shape::AABB(r))
+                if c1.sweep || c2.sweep => {
+                    // TODO
+                }, 
+                // Sweep Circle-Circle collision.
+                (&Shape::Circle{offset: c1_o, radius: c1_r, depth: ref c1_d}, &Shape::Circle{offset: c2_o, radius: c2_r, depth: ref c2_d}) 
+                if c1.sweep || c2.sweep => {
+                    // TODO
+                },
+                _ => ()
             }
         });
+
+        for collision in collisions {
+            match collision {
+                Collision::Sweep(ent, other, toi, norm) => {
+                    let other_toi = min_sweep[&other].0;
+
+                    if relative_eq!(toi, other_toi) {
+                        let t = tran.get_mut(ent).unwrap();
+                        let disp = t.pos - t.last_pos;
+
+                        let mut new_disp = (disp * toi).map(|x| x - if relative_ne!(x, 0.0) {x.signum() * f32::EPSILON} else {0.0});
+
+                        let time_left = 1.0 - toi;
+                        let dot = (disp.x * norm.y + disp.y * norm.x) * time_left;
+                        let slide = Vector3::new(dot * norm.y, dot * norm.x, 0.0);
+
+                        new_disp += slide;
+
+                        t.pos = t.last_pos + new_disp;
+
+                        lazy.exec_mut(move |world| {
+                            let res = &mut world.res as *mut specs::Resources;
+
+                            if let Some(ref mutex) = world.read_resource::<res::Lua>().0 {
+                                let lua = mutex.lock().unwrap();
+
+                                {
+                                let coll = world.read_storage::<comp::Collider>();
+                                
+                                if let Some(cb) = coll.get(ent).unwrap().on_collide.as_ref() {
+                                    if let Some(func) = lua.registry_value::<LuaFunction>(&cb).ok() {
+                                        func.call::<_, ()>((LuaWorld(res), LuaEntity(ent), LuaEntity(other))).unwrap();
+                                    }
+                                }
+                                }
+                            }
+                        });
+                    }
+                },
+                Collision::Discrete(ent, other, disp) => {
+                    let t = tran.get_mut(ent).unwrap();
+                    t.pos += disp;
+
+                }
+            }
+        }
     }
 
     fn setup(&mut self, res: &mut specs::Resources) {
@@ -255,4 +284,10 @@ impl<'a> specs::System<'a> for CollisionSystem {
         self.transform_ins_read = Some(tran_storage.track_inserted());        
         self.transform_mod_read = Some(tran_storage.track_modified());        
     }
+}
+
+#[derive(Debug)]
+enum Collision {
+    Sweep(specs::Entity, specs::Entity, f32, Vector3<f32>),
+    Discrete(specs::Entity, specs::Entity, Vector3<f32>),
 }
