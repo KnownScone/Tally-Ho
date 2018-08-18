@@ -45,6 +45,8 @@ impl<'a> specs::System<'a> for CollisionSystem {
     );
 
     fn run(&mut self, (ent, mut tran, mut vel, mut coll, lazy): Self::SystemData) {
+        use specs::Join;
+
         /* NOTE:
             Entities with collider components won't participate in 
             collision until it has a transform component.
@@ -57,9 +59,6 @@ impl<'a> specs::System<'a> for CollisionSystem {
         tran.populate_inserted(&mut self.transform_ins_read.as_mut().unwrap(), &mut self.ins_transform);
         tran.populate_modified(&mut self.transform_mod_read.as_mut().unwrap(), &mut self.mod_transform);
         
-        // Broad phase
-        use specs::Join;
-        
         // Initialize the collider with its transform.
         for (ent, tran, mut coll, _) in (&*ent, &tran, &mut coll, &self.ins_transform).join() {
             let obj = coll::Object {
@@ -70,6 +69,7 @@ impl<'a> specs::System<'a> for CollisionSystem {
             // Insert new object into broadphase.
             let idx = self.broad_phase.insert(obj);
 
+            // Make sure the collider knows where it is.
             coll.index = Some(idx);
         }
 
@@ -98,13 +98,23 @@ impl<'a> specs::System<'a> for CollisionSystem {
                 coll.shape.bound(tran.pos)
             };
 
+            // Update the collision object on the broadphase grid.
             self.broad_phase.update(coll.index.unwrap(), bound);
         }
 
+        // Maps swept entities to their (current) minimum time of impact and the index of the collision.
         let mut min_sweep: HashMap<specs::Entity, (f32, usize)> = HashMap::new();
+        // Maps discrete entities to their (current) maxmimum displacement (to get them out of a collision) and the index of the collision.
+        let mut max_disp: HashMap<specs::Entity, (Vector3<f32>, usize)> = HashMap::new();
+        // List of collisions that will be resolved.
         let mut collisions: Vec<Collision> = Vec::new();
 
+        // Loop through all the collision pairs that the broad phase has detected.
+        // * There should be no "duplicates", as in the same pair of entities showing up but in the opposite order.
         self.broad_phase.for_each(|(e1, e2)| {
+            // TODO: Filter collisions
+
+            // Get the components we need.
             let c1 = coll.get(e1).unwrap();
             let c2 = coll.get(e2).unwrap();
             let t1 = tran.get(e1).unwrap();
@@ -116,11 +126,13 @@ impl<'a> specs::System<'a> for CollisionSystem {
                 // Discrete AABB-AABB collision.
                 (&Shape::AABB(r1), &Shape::AABB(r2)) 
                 if !c1.sweep && !c2.sweep => {
+                    // The collider AABB in world space.
                     let r1 = Rect3::new(
                         t1.pos + r1.min,
                         t1.pos + r1.max,
                     );
 
+                    // The collider AABB in world space.
                     let r2 = Rect3::new(
                         t2.pos + r2.min,
                         t2.pos + r2.max,
@@ -128,21 +140,63 @@ impl<'a> specs::System<'a> for CollisionSystem {
 
                     let pen = penetration_vector(r1, r2);
 
+                    // If the two colliders actually penetrated eachother.
                     if relative_ne!(pen, Vector3::zero()) {
-                        let d1 = pen / 2.0;
-                        let d2 = -pen / 2.0;
+                        use cgmath::ElementWise;
                         
-                        collisions.push(Collision::Discrete(
-                            e1,
-                            e2,
-                            d1
-                        ));
+                        let factor1 = disp1.div_element_wise(disp1 + disp2).map(|x| if x.is_nan() {0.0} else {x});
+                        let factor2 = disp2.div_element_wise(disp1 + disp2).map(|x| if x.is_nan() {0.0} else {x});
+                        
+                        let d1 = pen.mul_element_wise(factor1);
+                        let d2 = -pen.mul_element_wise(factor2);
 
-                        collisions.push(Collision::Discrete(
-                            e2,
-                            e1,
-                            d2
-                        ));
+                        match max_disp.entry(e1) {
+                            Entry::Occupied(mut entry) => {
+                                // If this disp has a magnitude greater than the current one, replace it.
+                                if d1.magnitude2() > entry.get().0.magnitude2() {
+                                    collisions[entry.get().1] = 
+                                        Collision::Discrete(
+                                            e1,
+                                            e2,
+                                            d1
+                                        );
+
+                                    entry.get_mut().0 = d1;
+                                }
+                            },
+                            Entry::Vacant(entry) => {
+                                collisions.push(Collision::Discrete(
+                                    e1,
+                                    e2,
+                                    d1
+                                ));
+                                entry.insert((d1, collisions.len() - 1));
+                            }
+                        }
+
+                        match max_disp.entry(e2) {
+                            Entry::Occupied(mut entry) => {
+                                // If this disp has a magnitude greater than the current one, replace it.
+                                if d2.magnitude2() > entry.get().0.magnitude2() {
+                                    collisions[entry.get().1] = 
+                                        Collision::Discrete(
+                                            e2,
+                                            e1,
+                                            d2
+                                        );
+
+                                    entry.get_mut().0 = d2;
+                                }
+                            },
+                            Entry::Vacant(entry) => {
+                                collisions.push(Collision::Discrete(
+                                    e2,
+                                    e1,
+                                    d2
+                                ));
+                                entry.insert((d2, collisions.len() - 1));
+                            }
+                        }
                     }
                 },
                 // Discrete AABB-Circle collision.
@@ -192,8 +246,8 @@ impl<'a> specs::System<'a> for CollisionSystem {
                                 if t_first < entry.get().0 {
                                     collisions[entry.get().1] = 
                                         Collision::Sweep(
-                                            e1,
                                             e2,
+                                            e1,
                                             t_first,
                                             norm
                                         );
@@ -234,6 +288,7 @@ impl<'a> specs::System<'a> for CollisionSystem {
                 Collision::Sweep(ent, other, toi, norm) => {
                     let other_toi = min_sweep[&other].0;
 
+                    // Double check if these entities actually collide. Before, for example, hitting another object.
                     if relative_eq!(toi, other_toi) {
                         let t = tran.get_mut(ent).unwrap();
                         let disp = t.pos - t.last_pos;
@@ -270,7 +325,6 @@ impl<'a> specs::System<'a> for CollisionSystem {
                 Collision::Discrete(ent, other, disp) => {
                     let t = tran.get_mut(ent).unwrap();
                     t.pos += disp;
-
                 }
             }
         }

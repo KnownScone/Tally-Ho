@@ -18,7 +18,7 @@ stuff = {
         vel = vel + vec3f(1.0, 0.0, 0.0)
       end
       
-      world:set_velocity(this, vel:normalized() * 2.0)
+      world:set_velocity(this, vel:normalized() * 0.5)
     end
   },
   transform = {
@@ -43,7 +43,7 @@ stuff = {
       max_y = 0.1,
       max_z = 0.1,
     },
-    sweep = true,
+    sweep = false,
     on_collide = function(world, this, other)
       print(string.format("%s collided with %s", this:id(), other:id()))
     end
@@ -88,7 +88,7 @@ stuff2 = {
       max_y = 0.1,
       max_z = 0.1
     },
-    sweep = true,
+    sweep = false,
     on_collide = function(world, this, other)
     end
   },
@@ -132,7 +132,7 @@ stuff3 = {
       max_y = 0.1,
       max_z = 0.1
     },
-    sweep = true,
+    sweep = false,
     on_collide = function(world, this, other)
       print(string.format("%s collided with %s", this:id(), other:id()))
     end
