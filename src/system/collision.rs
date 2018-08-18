@@ -143,9 +143,11 @@ impl<'a> specs::System<'a> for CollisionSystem {
                     // If the two colliders actually penetrated eachother.
                     if relative_ne!(pen, Vector3::zero()) {
                         use cgmath::ElementWise;
+
+                        let (abs_disp1, abs_disp2) = (disp1.map(|x| x.abs()), disp2.map(|x| x.abs()));
                         
-                        let factor1 = disp1.div_element_wise(disp1 + disp2).map(|x| if x.is_nan() {0.0} else {x});
-                        let factor2 = disp2.div_element_wise(disp1 + disp2).map(|x| if x.is_nan() {0.0} else {x});
+                        let factor1 = abs_disp1.div_element_wise(abs_disp1 + abs_disp2).map(|x| if x.is_nan() {0.0} else {x});
+                        let factor2 = abs_disp2.div_element_wise(abs_disp1 + abs_disp2).map(|x| if x.is_nan() {0.0} else {x});
                         
                         let d1 = pen.mul_element_wise(factor1);
                         let d2 = -pen.mul_element_wise(factor2);
@@ -295,10 +297,13 @@ impl<'a> specs::System<'a> for CollisionSystem {
 
                         let mut new_disp = (disp * toi).map(|x| x - if relative_ne!(x, 0.0) {x.signum() * f32::EPSILON} else {0.0});
 
+                        /* Slide mechanics:
+                            With what remaining velocity an object has, slide it along the surface it collided with
+                            in the direction that the object approached it (e.g. if going diagonally up, it slides up).
+                        */
                         let time_left = 1.0 - toi;
                         let dot = (disp.x * norm.y + disp.y * norm.x) * time_left;
                         let slide = Vector3::new(dot * norm.y, dot * norm.x, 0.0);
-
                         new_disp += slide;
 
                         t.pos = t.last_pos + new_disp;
@@ -325,6 +330,24 @@ impl<'a> specs::System<'a> for CollisionSystem {
                 Collision::Discrete(ent, other, disp) => {
                     let t = tran.get_mut(ent).unwrap();
                     t.pos += disp;
+
+                    lazy.exec_mut(move |world| {
+                        let res = &mut world.res as *mut specs::Resources;
+
+                        if let Some(ref mutex) = world.read_resource::<res::Lua>().0 {
+                            let lua = mutex.lock().unwrap();
+
+                            {
+                            let coll = world.read_storage::<comp::Collider>();
+                            
+                            if let Some(cb) = coll.get(ent).unwrap().on_collide.as_ref() {
+                                if let Some(func) = lua.registry_value::<LuaFunction>(&cb).ok() {
+                                    func.call::<_, ()>((LuaWorld(res), LuaEntity(ent), LuaEntity(other))).unwrap();
+                                }
+                            }
+                            }
+                        }
+                    });
                 }
             }
         }
