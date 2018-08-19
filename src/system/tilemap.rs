@@ -12,6 +12,7 @@ use vk::buffer::CpuBufferPool;
 use cgmath::{Vector2, Vector3, Matrix4, Zero};
 use specs;
 
+// Currently a system that just loads tile map data into "strips" (entities meant to hold the tile data in chunks).
 pub struct TileMapSystem;
 
 impl<'a> specs::System<'a> for TileMapSystem {
@@ -29,12 +30,16 @@ impl<'a> specs::System<'a> for TileMapSystem {
         for (ent, mut map) in (&*ents, &mut map).join() {
             // If we need to load the map.
             if let Some(load) = map.load.take() {
+                // The following two hashmap are to be sure that there are no duplicate tile map strips in the same location.
+                // ! Might remove them later, as they aren't that important.
                 let mut render: HashMap<Vector3<u32>, comp::RenderStrip> = HashMap::new();
                 let mut collision: HashMap<Vector3<u32>, comp::CollisionStrip> = HashMap::new();
 
                 for chunk in load.chunks.iter() {
                     for layer in chunk.layers.iter() {
+                        // Checks what the layer's data represents.
                         match layer.property {
+                            // If the layer's data represents a tile index.
                             parse::LayerProperty::TileIndex => {
                                 for (idx, strip) in layer.strips.iter().enumerate() {
                                     let strip_pos = Vector3::new(
@@ -44,6 +49,7 @@ impl<'a> specs::System<'a> for TileMapSystem {
                                     );
 
                                     let data: Vec<Option<Rect2<f32>>> = strip.iter()
+                                        // Turns a texture index into a rect in UV coords.
                                         .map(|tex_idx| {
                                             let subtex_dims = Vector2::new(
                                                 1.0 / map.tex_dims().x as f32,
@@ -87,6 +93,7 @@ impl<'a> specs::System<'a> for TileMapSystem {
                                 }
                             },
 
+                            // If the layer's data represents whether the tile blocks or not (collision).
                             parse::LayerProperty::Blocking => {
                                 for (idx, strip) in layer.strips.iter().enumerate() {
                                     let strip_pos = Vector3::new(
@@ -139,6 +146,7 @@ impl<'a> specs::System<'a> for TileMapSystem {
     }
 }
 
+// Creates and manages colliders made from collision strips.
 pub struct TileMapCollisionSystem {
     collision_strip_ins_read: Option<specs::ReaderId<specs::InsertedFlag>>,
     collision_strip_mod_read: Option<specs::ReaderId<specs::ModifiedFlag>>,
@@ -234,6 +242,7 @@ impl<'a> specs::System<'a> for TileMapCollisionSystem {
     }
 }
 
+// Creates and manages render data (vertex buffers, index buffers, etc.) of render strips.
 pub struct TileMapRenderSystem {
     render_strip_ins_read: Option<specs::ReaderId<specs::InsertedFlag>>,
     render_strip_mod_read: Option<specs::ReaderId<specs::ModifiedFlag>>,

@@ -47,6 +47,7 @@ impl BroadPhase {
                 self.objects.len() - 1
             };
 
+        // Insert the object into each of its cells.
         for cell_x in grid_bound.min.x..grid_bound.max.x {
             for cell_y in grid_bound.min.y..grid_bound.max.y {
                 let pos = Vector2::new(cell_x, cell_y);
@@ -54,6 +55,7 @@ impl BroadPhase {
                 self.cells.entry(pos).or_insert(Cell::new())
                     .objects.push(obj_idx);
 
+                // Make sure we update the collisions in this cell.
                 self.active_cells.insert(pos);
             }
         }
@@ -68,11 +70,13 @@ impl BroadPhase {
         // Update the bound.
         self.objects[idx].as_mut().unwrap().bound = bound;
 
+        // Remove the object from the cells it has left.
+        // * We don't need to update collisions in old cells because the collision pairs from the last tick have already been drained.
         for cell_x in old_grid_bound.min.x..old_grid_bound.max.x {
             for cell_y in old_grid_bound.min.y..old_grid_bound.max.y {
                 let pos = Vector2::new(cell_x, cell_y);
 
-                // If the old grid bound is still using this cell, we don't need to remove it.
+                // If the new grid bound is still using this cell, we don't need to remove it.
                 if cell_x >= grid_bound.min.x && cell_x < grid_bound.max.x 
                 && cell_y >= grid_bound.min.y && cell_y < grid_bound.max.y {
                     continue;
@@ -86,7 +90,7 @@ impl BroadPhase {
             }
         }
 
-        // Add to new cells.
+        // Add the object to the new cells (and update their collisions).
         for cell_x in grid_bound.min.x..grid_bound.max.x {
             for cell_y in grid_bound.min.y..grid_bound.max.y {
                 let pos = Vector2::new(cell_x, cell_y);
@@ -94,7 +98,7 @@ impl BroadPhase {
                 // If the old grid bound included this cell, we don't need to insert.
                 if cell_x >= old_grid_bound.min.x && cell_x < old_grid_bound.max.x 
                 && cell_y >= old_grid_bound.min.y && cell_y < old_grid_bound.max.y {
-                    // but we do need to update collision first...
+                    // but we do need to be sure we update the collision in this cell first...
                     self.active_cells.insert(pos);
                     continue;
                 }
@@ -133,6 +137,7 @@ impl BroadPhase {
         self.free_idxs.push_back(idx);
     }
 
+    // Turns a bound in world space to a bound that encompasses it in grid space. 
     fn grid_bound(&self, rect: &Rect3<f32>) -> Rect2<i32> {
         let min = Vector2::new(
             (rect.min.x / CELL_BOUND.x).floor() as i32,
@@ -156,9 +161,11 @@ impl BroadPhase {
     {
         let mut coll_pairs: HashSet<(usize, usize)> = HashSet::new();
         
+        // For each cell that has recently been edited.
         for cell_pos in self.active_cells.drain() {
             if let Some(cell) = self.cells.get(&cell_pos) {
-                // Brute-force collision checking
+
+                // Brute-force collision checking; intersection check on each pair.
                 for c_i in 0..cell.objects.len() {
                     for c_j in c_i+1..cell.objects.len() {
                         let idx1 = cell.objects[c_i];
@@ -177,6 +184,7 @@ impl BroadPhase {
             }
         }
 
+        // The collision pairs detected are turned into pairs of entities and we the call the function on each of them.
         let objects = &self.objects;
         coll_pairs.drain()
             .filter_map(|(i1, i2)| {
