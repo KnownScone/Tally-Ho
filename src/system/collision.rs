@@ -311,17 +311,15 @@ impl<'a> specs::System<'a> for CollisionSystem {
                         lazy.exec_mut(move |world| {
                             let res = &mut world.res as *mut specs::Resources;
 
-                            if let Some(ref mutex) = world.read_resource::<res::Lua>().0 {
-                                let lua = mutex.lock().unwrap();
+                            if let Some(ref mutex) = world.read_resource::<res::Script>().0 {
+                                let script = mutex.lock().unwrap();
 
-                                {
                                 let coll = world.read_storage::<comp::Collider>();
                                 
                                 if let Some(cb) = coll.get(ent).unwrap().on_collide.as_ref() {
-                                    if let Some(func) = lua.registry_value::<LuaFunction>(&cb).ok() {
+                                    if let Some(func) = script.registry_value::<LuaFunction>(&cb).ok() {
                                         func.call::<_, ()>((LuaWorld(res), LuaEntity(ent), LuaEntity(other))).unwrap();
                                     }
-                                }
                                 }
                             }
                         });
@@ -334,17 +332,15 @@ impl<'a> specs::System<'a> for CollisionSystem {
                     lazy.exec_mut(move |world| {
                         let res = &mut world.res as *mut specs::Resources;
 
-                        if let Some(ref mutex) = world.read_resource::<res::Lua>().0 {
-                            let lua = mutex.lock().unwrap();
+                        if let Some(ref mutex) = world.read_resource::<res::Script>().0 {
+                            let script = mutex.lock().unwrap();
 
-                            {
                             let coll = world.read_storage::<comp::Collider>();
                             
                             if let Some(cb) = coll.get(ent).unwrap().on_collide.as_ref() {
-                                if let Some(func) = lua.registry_value::<LuaFunction>(&cb).ok() {
+                                if let Some(func) = script.registry_value::<LuaFunction>(&cb).ok() {
                                     func.call::<_, ()>((LuaWorld(res), LuaEntity(ent), LuaEntity(other))).unwrap();
                                 }
-                            }
                             }
                         }
                     });

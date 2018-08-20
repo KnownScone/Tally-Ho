@@ -4,16 +4,17 @@ pub use self::render::{RenderId, SortedRender};
 pub mod input;
 pub use self::input::{InputList};
 
+use script;
+
 use std::sync::{Mutex, Arc};
 
 use vulkano as vk;
-use rlua;
 
 #[derive(Default)]
 pub struct DeltaTime(pub f32);
 
 #[derive(Default)]
-pub struct Lua(pub Option<Arc<Mutex<rlua::Lua>>>);
+pub struct Script(pub Option<Arc<Mutex<script::Script>>>);
 
 #[derive(Default)]
 pub struct ViewProjectionSet(pub Option<Arc<vk::descriptor::DescriptorSet + Send + Sync>>);

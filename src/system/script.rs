@@ -12,19 +12,19 @@ impl<'a> specs::RunNow<'a> for OnTickEvent {
     fn run_now(&mut self, res: &'a specs::Resources) {
         use specs::Join;
 
-        let (ent, script, lua, dt): (specs::Entities, specs::ReadStorage<comp::ScriptBehavior>, specs::Read<res::Lua>, specs::Read<res::DeltaTime>) = specs::SystemData::fetch(&res);
+        let (ent, behav, script, dt): (specs::Entities, specs::ReadStorage<comp::ScriptBehavior>, specs::Read<res::Script>, specs::Read<res::DeltaTime>) = specs::SystemData::fetch(&res);
 
         let dt = dt.0;
-        if let Some(ref mutex) = lua.0 {
-            let lua = mutex.lock().unwrap();
+        if let Some(ref mutex) = script.0 {
+            let script = mutex.lock().unwrap();
 
-            for (ent, script) in (&*ent, &script).join() {
+            for (ent, behav) in (&*ent, &behav).join() {
                 unsafe {
                     let res = res as *const _;
 
-                    let on_tick = script.on_tick.as_ref();
+                    let on_tick = behav.on_tick.as_ref();
 
-                    if let Some(func) = on_tick.and_then(|x| lua.registry_value::<LuaFunction>(&x).ok()) {
+                    if let Some(func) = on_tick.and_then(|x| script.registry_value::<LuaFunction>(&x).ok()) {
                         func.call::<_, ()>((LuaWorld(res), LuaEntity(ent), dt)).unwrap();
                     }
                 }

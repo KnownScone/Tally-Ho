@@ -9,6 +9,9 @@ use ::component as comp;
 use std::sync::{Arc, Mutex};
 use std::collections::HashMap;
 use std::cell::{RefCell};
+use std::io::prelude::*;
+use std::io::Error as IoError;
+use std::fs::File;
 use std::rc::Rc;
 
 use specs;
@@ -34,6 +37,7 @@ impl UserData for LuaEntity {
 pub enum ScriptError {
     InvalidEntity(String),
     InvalidComponent(String),
+    IoError(IoError),
     LuaError(LuaError),
 }
 
@@ -42,7 +46,13 @@ impl From<LuaError> for ScriptError {
         ScriptError::LuaError(error)
     }
 }
-        
+
+impl From<IoError> for ScriptError {
+    fn from(error: IoError) -> Self {
+        ScriptError::IoError(error)
+    }
+}
+
 #[derive(Clone)]
 pub struct LuaWorld(pub *const specs::Resources);
 
@@ -63,37 +73,61 @@ macro_rules! script {
             }
         }
 
-        pub struct Script(());
+        pub struct Script {
+            pub lua: Lua,
+        }
 
         impl Script {
-            pub fn new(lua: &Lua) -> Script {
-                $(<$types as types::LuaCtor>::add_ctors(lua);)*
+            pub fn new() -> Script {
+                let script = Script {
+                    lua: Lua::new()
+                };
 
-                Script(())
+                // Register all the type constructors.
+                $(<$types as types::LuaCtor>::add_ctors(&script.lua);)*
+
+                script
             }
 
-            fn parse_component<'a>(&self, lua: &Lua, lua_name: &str, data: LuaValue, eb: specs::EntityBuilder<'a>) -> ScriptResult<specs::EntityBuilder<'a>> {
+            pub fn load_file<'a>(&self, path: &str) -> ScriptResult<()> {
+                let mut file = File::open(path)?;
+                
+                let mut contents = String::new();
+                file.read_to_string(&mut contents)?;
+                
+                Ok(self.lua.exec::<()>(&contents, None)?)
+            }
+
+            fn parse_component<'a>(&self, lua_name: &str, data: LuaValue, eb: specs::EntityBuilder<'a>) -> ScriptResult<specs::EntityBuilder<'a>> {
                 match lua_name {
                     $($lua_names => {
                         Ok(eb.with(
-                            <$comp_types as ComponentParser>::parse(data, lua)?
+                            <$comp_types as ComponentParser>::parse(data, &self.lua)?
                         ))
                     }),*
                     _ => Err(ScriptError::InvalidComponent(lua_name.into())),
                 }
             }
 
-            pub fn parse_entity(&self, lua: &Lua, lua_name: &str, mut eb: specs::EntityBuilder) -> ScriptResult<specs::Entity> {
-                let globals = lua.globals();
+            pub fn parse_entity(&self, lua_name: &str, mut eb: specs::EntityBuilder) -> ScriptResult<specs::Entity> {
+                let globals = self.lua.globals();
                 let ent_table: Table = globals.get(lua_name.clone())
                     .map_err(|x| ScriptError::InvalidEntity(lua_name.into()))?;
 
                 for comp_pair in ent_table.pairs::<String, _>() {
                     let (comp_lua_name, comp_data) = comp_pair?;
 
-                    eb = self.parse_component(lua, &comp_lua_name, comp_data, eb)?;
+                    eb = self.parse_component(&comp_lua_name, comp_data, eb)?;
                 }
                 Ok(eb.build())
+            }
+        }
+
+        impl ::std::ops::Deref for Script {
+            type Target = Lua;
+
+            fn deref(&self) -> &Lua {
+                &self.lua
             }
         }
     };

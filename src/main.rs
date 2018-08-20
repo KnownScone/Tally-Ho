@@ -37,8 +37,6 @@ use system as sys;
 
 use std::sync::{Arc, Mutex};
 use std::cmp::{max, min};
-use std::fs::File;
-use std::io::prelude::*;
 
 use vulkano as vk;
 use vk::instance::{Instance, PhysicalDevice};
@@ -403,7 +401,7 @@ fn main() {
     .build(); 
 
     // TODO: We need to find some way to occasionally call "expire_registry_values" on lua.
-    game.world.add_resource(res::Lua(Some(Arc::new(Mutex::new(rlua::Lua::new())))));
+    game.world.add_resource(res::Script(Some(Arc::new(Mutex::new(script::Script::new())))));
     game.world.add_resource(res::TextureSet(Some(tex_set)));   
     game.world.add_resource(res::ViewProjectionSet(Some(view_proj_set.clone())));   
     game.world.add_resource(res::Device(Some(device.clone())));   
@@ -413,25 +411,14 @@ fn main() {
     game.world.add_resource(res::InputList::new());
 
     {
-        let mutex = game.world.read_resource::<res::Lua>().0.as_ref().unwrap().clone();
-        let lua = mutex.lock().unwrap();
+        let mutex = game.world.read_resource::<res::Script>().0.as_ref().unwrap().clone();
+        let script = mutex.lock().unwrap();
 
-        // TODO: THIS SUCKS ASS! Maybe make the script a resource and have it own the lua instance too?
-        let script = script::Script::new(&lua);
+        script.load_file("assets/scripts/test.lua");
 
-        let mut file = File::open("assets/scripts/test.lua")
-            .expect("File was not found");
-        
-        let mut contents = String::new();
-        file.read_to_string(&mut contents)
-            .expect("Couldn't read the file");
-        
-        lua.exec::<()>(&contents, None)
-            .expect("Script failed to execute");
-
-        let _e = script.parse_entity(&lua, "stuff", game.world.create_entity()).unwrap();
-        let _e = script.parse_entity(&lua, "stuff2", game.world.create_entity()).unwrap();
-        let _e = script.parse_entity(&lua, "stuff3", game.world.create_entity()).unwrap();
+        let _e = script.parse_entity("stuff", game.world.create_entity()).unwrap();
+        let _e = script.parse_entity("stuff2", game.world.create_entity()).unwrap();
+        let _e = script.parse_entity("stuff3", game.world.create_entity()).unwrap();
         // let e = script.parse_entity("stuff_map", game.world.create_entity()).unwrap();
     }
 
